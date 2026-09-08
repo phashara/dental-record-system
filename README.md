@@ -82,6 +82,23 @@ git push -u origin main
 
 ---
 
+## ⚡ วิธีการ Deploy บน Vercel (Vercel One-Click Deploy)
+
+โปรเจกต์นี้ได้รับการตั้งค่าพร้อมสำหรับการ Deploy บน **Vercel** ทันที (พร้อมรองรับทั้ง Frontend Vite และ Backend Serverless API):
+
+1. นำโค้ดขึ้น GitHub ตามขั้นตอนด้านบน
+2. เข้าสู่ระบบ [vercel.com](https://vercel.com) แล้วกด **"Add New..."** -> **"Project"**
+3. เลือก Repository ที่คุณสร้างไว้ แล้วกด **"Import"**
+4. การตั้งค่าระบบ (Vercel จะตรวจพบอัตโนมัติ):
+   - **Framework Preset:** `Vite`
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `dist`
+5. ในช่อง **Environment Variables**:
+   - เพิ่มตัวแปรชื่อ `GEMINI_API_KEY` และใส่รหัส Gemini API Key ของคุณ
+6. กดปุ่ม **"Deploy"** รอประมาณ 1 นาที เว็บไซต์จะพร้อมใช้งานทันที!
+
+---
+
 ## 💻 วิธีการติดตั้งและรันในเครื่อง (Local Setup)
 
 ```bash
