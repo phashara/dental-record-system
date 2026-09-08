@@ -171,11 +171,14 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
   const startCamera = async () => {
     try {
       stopCamera();
+      // Prioritize vertical portrait constraints optimized for A4 paper and mobile
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: facingMode,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          // Mobile portrait: width < height
+          width: { ideal: 1080 },
+          height: { ideal: 1920 },
+          aspectRatio: { ideal: 0.707 }, // A4 document aspect ratio (1 / 1.414)
         },
         audio: false,
       };
@@ -186,9 +189,21 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         await videoRef.current.play();
       }
     } catch (err: any) {
-      console.warn('Camera access error:', err);
-      setErrorMsg('ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตสิทธิ์กล้อง หรือใช้การอัปโหลดรูปภาพ');
-      setCameraActive(false);
+      console.warn('Portrait camera constraints failed, attempting fallback:', err);
+      try {
+        const fallbackStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingMode },
+          audio: false,
+        });
+        streamRef.current = fallbackStream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = fallbackStream;
+          await videoRef.current.play();
+        }
+      } catch (fallbackErr) {
+        setErrorMsg('ไม่สามารถเข้าถึงกล้องได้ กรุณาอนุญาตสิทธิ์กล้อง หรือใช้การอัปโหลดรูปภาพ');
+        setCameraActive(false);
+      }
     }
   };
 
@@ -212,13 +227,14 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
       if (navigator.vibrate) {
         navigator.vibrate(40);
       }
+      const video = videoRef.current;
       const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth || 1280;
-      canvas.height = videoRef.current.videoHeight || 720;
+      canvas.width = video.videoWidth || 1080;
+      canvas.height = video.videoHeight || 1920;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
         setPreviewImage(dataUrl);
         setCameraActive(false);
         stopCamera();
@@ -389,42 +405,46 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
           {extractedRecords.length === 0 ? (
             <div className="space-y-5">
               
-              {/* Camera Viewfinder or Image Preview Area */}
-              <div className="relative w-full aspect-[4/3] sm:aspect-[16/10] bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-800 flex items-center justify-center shadow-inner">
+              {/* Camera Viewfinder or Image Preview Area - Optimized for Vertical A4 Paper & Mobile Phones */}
+              <div className="relative w-full max-w-sm sm:max-w-md mx-auto aspect-[3/4] sm:aspect-[1/1.414] max-h-[56vh] bg-zinc-950 rounded-2xl overflow-hidden border border-zinc-800 flex items-center justify-center shadow-inner">
                 {cameraActive ? (
                   <>
                     <video
                       ref={videoRef}
                       playsInline
                       muted
+                      autoPlay
                       className="w-full h-full object-cover"
                     />
-                    {/* iOS Reticle Scan Overlay */}
-                    <div className="absolute inset-8 sm:inset-12 border-2 border-dashed border-blue-400/70 rounded-2xl pointer-events-none flex flex-col justify-between p-4">
-                      <div className="flex justify-between">
-                        <div className="w-5 h-5 border-t-4 border-l-4 border-blue-500 rounded-tl-lg" />
-                        <div className="w-5 h-5 border-t-4 border-r-4 border-blue-500 rounded-tr-lg" />
+                    {/* iOS Reticle Scan Overlay - Vertical A4 Sheet Guides */}
+                    <div className="absolute inset-3.5 sm:inset-5 border-2 border-dashed border-blue-400/80 rounded-xl pointer-events-none flex flex-col justify-between p-3 bg-blue-500/5">
+                      <div className="flex justify-between items-start">
+                        <div className="w-6 h-6 border-t-4 border-l-4 border-blue-500 rounded-tl-lg shadow-sm" />
+                        <span className="px-2.5 py-1 rounded-full bg-blue-600/90 text-white text-[10px] font-semibold backdrop-blur-md shadow-sm">
+                          📄 จัดกระดาษ A4 / OPD Card แนวตั้ง
+                        </span>
+                        <div className="w-6 h-6 border-t-4 border-r-4 border-blue-500 rounded-tr-lg shadow-sm" />
                       </div>
                       <div className="text-center">
-                        <span className="px-3 py-1 rounded-full bg-black/60 text-white/90 text-xs backdrop-blur-md">
-                          วาง OPD Card หรือ ชาร์ตฟันปลอม ให้อยู่ในกรอบ
+                        <span className="px-3 py-1.5 rounded-full bg-black/75 text-white text-xs backdrop-blur-md font-medium shadow-md">
+                          จัดขอบใบตรวจรักษาให้อยู่ในกรอบแนวตั้ง
                         </span>
                       </div>
-                      <div className="flex justify-between">
-                        <div className="w-5 h-5 border-b-4 border-l-4 border-blue-500 rounded-bl-lg" />
-                        <div className="w-5 h-5 border-b-4 border-r-4 border-blue-500 rounded-br-lg" />
+                      <div className="flex justify-between items-end">
+                        <div className="w-6 h-6 border-b-4 border-l-4 border-blue-500 rounded-bl-lg shadow-sm" />
+                        <div className="w-6 h-6 border-b-4 border-r-4 border-blue-500 rounded-br-lg shadow-sm" />
                       </div>
                     </div>
                   </>
                 ) : previewImage ? (
-                  <div className="relative w-full h-full flex items-center justify-center bg-zinc-900">
+                  <div className="relative w-full h-full flex items-center justify-center bg-zinc-950">
                     <img
                       src={previewImage}
                       alt="Scan Preview"
-                      className="max-h-full max-w-full object-contain"
+                      className="h-full w-full object-contain"
                     />
                     {isProcessing && (
-                      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex flex-col items-center justify-center text-white p-6 text-center">
+                      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center text-white p-6 text-center">
                         <RefreshCw className="w-10 h-10 text-blue-400 animate-spin mb-3" />
                         <p className="text-sm font-semibold">{ocrStep || 'กำลังประมวลผลด้วย AI...'}</p>
                         <p className="text-xs text-zinc-400 mt-1">วิเคราะห์ตัวอักษร ลายมือแพทย์ และค่าใช้จ่ายแลป</p>
@@ -438,10 +458,10 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                     </div>
                     <div>
                       <h3 className="text-sm font-semibold text-zinc-100">
-                        พร้อมสแกนเอกสารทันตกรรม
+                        พร้อมสแกนเอกสารแนวตั้ง (A4)
                       </h3>
                       <p className="text-xs text-zinc-400 mt-1">
-                        ใช้กล้องโทรศัพท์สแกน หรืออัปโหลดภาพใบตรวจรักษา OPD Card เพื่อดึงข้อมูลอัตโนมัติ
+                        ใช้กล้องมือถือสแกน หรืออัปโหลดภาพใบตรวจ OPD Card เพื่อดึงข้อมูลอัตโนมัติ
                       </p>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2 pt-2 justify-center">
@@ -450,7 +470,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                         className="flex items-center justify-center space-x-2 px-4 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition-all"
                       >
                         <Camera className="w-4 h-4" />
-                        <span>เปิดกล้องมือถือสแกน</span>
+                        <span>เปิดกล้องมือถือแนวตั้ง</span>
                       </button>
                       <button
                         onClick={() => fileInputRef.current?.click()}
@@ -471,6 +491,45 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                 className="hidden"
                 onChange={handleFileUpload}
               />
+
+              {/* Action Controls when previewing image */}
+              {previewImage && !isProcessing && (
+                <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                  <button
+                    onClick={() => {
+                      setPreviewImage(null);
+                      setErrorMsg(null);
+                      setCameraActive(true);
+                    }}
+                    className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition-all"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>เปิดกล้องถ่ายใหม่</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPreviewImage(null);
+                      setErrorMsg(null);
+                      fileInputRef.current?.click();
+                    }}
+                    className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 text-xs font-semibold transition-all"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>เลือกรูปอื่น</span>
+                  </button>
+                  {errorMsg && (
+                    <button
+                      onClick={() => {
+                        if (previewImage) processOcr(previewImage);
+                      }}
+                      className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-sm transition-all"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      <span>ลองประมวลผลอีกครั้ง</span>
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* Shutter / Camera Controls when camera is active */}
               {cameraActive && (
