@@ -83,8 +83,14 @@ export class DentureStorageService {
 
             this.setLocalRecords(list);
           } else {
-            // If firestore is empty and we have local records or seed, offer seed
-            this.seedFirestoreFromInitialData();
+            // If firestore is empty, only seed if never initialized before
+            const hasInit = localStorage.getItem('denture_initialized');
+            const userCleared = localStorage.getItem('denture_user_cleared');
+            if (!hasInit && !userCleared) {
+              this.seedFirestoreFromInitialData();
+            } else {
+              this.setLocalRecords([]);
+            }
           }
         },
         error => {
@@ -370,6 +376,7 @@ export class DentureStorageService {
 
   // Delete record from Firestore and local cache
   public async deleteRecord(id: string): Promise<void> {
+    localStorage.setItem('denture_initialized', 'true');
     const local = this.getLocalRecords().filter(r => r.id !== id);
     this.setLocalRecords(local);
 
@@ -386,10 +393,52 @@ export class DentureStorageService {
       }
 
       try {
-        fetch(`/api/records/${id}`, { method: 'DELETE' }).catch(() => {});
+        await fetch(`/api/records/${id}`, { method: 'DELETE' }).catch(() => {});
       } catch (e) {}
     } else {
       this.addToOfflineQueue({ action: 'delete', record: { id } as any });
+    }
+  }
+
+  // Batch delete multiple records from Firestore and local cache
+  public async batchDeleteRecords(ids: string[]): Promise<void> {
+    if (!ids || ids.length === 0) return;
+    localStorage.setItem('denture_initialized', 'true');
+    const idSet = new Set(ids);
+    const local = this.getLocalRecords().filter(r => !idSet.has(r.id));
+    this.setLocalRecords(local);
+
+    if (this.isOnlineStatus) {
+      try {
+        const CHUNK_SIZE = 400;
+        for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+          const chunk = ids.slice(i, i + CHUNK_SIZE);
+          const batch = writeBatch(db);
+          chunk.forEach(id => {
+            const docRef = doc(db, FIRESTORE_COLLECTION, id);
+            batch.delete(docRef);
+          });
+          await batch.commit();
+        }
+      } catch (e) {
+        console.warn('Firestore batch delete failed:', e);
+        ids.forEach(id => {
+          this.addToOfflineQueue({ action: 'delete', record: { id } as any });
+        });
+      }
+
+      // Also notify local API in one batch call
+      try {
+        await fetch('/api/records/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        }).catch(() => {});
+      } catch (e) {}
+    } else {
+      ids.forEach(id => {
+        this.addToOfflineQueue({ action: 'delete', record: { id } as any });
+      });
     }
   }
 
@@ -448,19 +497,28 @@ export class DentureStorageService {
   }
 
   public async clearAllRecords(): Promise<void> {
+    localStorage.setItem('denture_user_cleared', 'true');
+    localStorage.setItem('denture_initialized', 'true');
+    localStorage.removeItem(OFFLINE_QUEUE_KEY);
     this.setLocalRecords([]);
+
     if (this.isOnlineStatus) {
       try {
         const snap = await getDocs(collection(db, FIRESTORE_COLLECTION));
-        const batch = writeBatch(db);
-        snap.forEach(d => batch.delete(d.ref));
-        await batch.commit();
+        const docs = snap.docs;
+        const CHUNK_SIZE = 400;
+        for (let i = 0; i < docs.length; i += CHUNK_SIZE) {
+          const chunk = docs.slice(i, i + CHUNK_SIZE);
+          const batch = writeBatch(db);
+          chunk.forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
       } catch (e) {
         console.warn('Firestore clear error', e);
       }
 
       try {
-        fetch('/api/records/clear', { method: 'POST' }).catch(() => {});
+        await fetch('/api/records/clear', { method: 'POST' }).catch(() => {});
       } catch (e) {}
     }
   }

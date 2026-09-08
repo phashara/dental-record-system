@@ -160,6 +160,13 @@ export default function App() {
     showToast('ลบรายการเรียบร้อยแล้ว');
   };
 
+  const handleBatchDeleteRecords = async (ids: string[]) => {
+    await dentureStorage.batchDeleteRecords(ids);
+    const updated = dentureStorage.getLocalRecords();
+    setRecords(updated);
+    showToast(`ลบข้อมูลเรียบร้อยแล้ว ${ids.length} รายการ`);
+  };
+
   const handleSelectDoctorFilter = (docName: string) => {
     setTableDoctorFilter(docName);
     setCurrentTab('records');
@@ -232,6 +239,7 @@ export default function App() {
               setIsAddModalOpen(true);
             }}
             onDeleteRecord={handleDeleteRecord}
+            onBatchDeleteRecords={handleBatchDeleteRecords}
             selectedDoctorFilter={tableDoctorFilter}
             onClearDoctorFilter={() => setTableDoctorFilter('all')}
             onExportCsv={() => dentureStorage.exportToCsv(isPdpaMode)}
@@ -334,6 +342,7 @@ export default function App() {
           setEditingRecord(r);
           setIsAddModalOpen(true);
         }}
+        onDelete={handleDeleteRecord}
         isPdpaMode={isPdpaMode}
       />
 

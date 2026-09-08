@@ -243,6 +243,19 @@ app.delete('/api/records/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// Batch delete records
+app.post('/api/records/batch-delete', (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids)) {
+    return res.status(400).json({ error: 'ids array required' });
+  }
+  const idSet = new Set(ids);
+  const records = getRecords();
+  const filtered = records.filter(r => !idSet.has(r.id));
+  saveRecords(filtered);
+  res.json({ success: true, count: filtered.length });
+});
+
 // Reset / Clear data
 app.post('/api/records/clear', (req, res) => {
   saveRecords([]);

@@ -12,7 +12,11 @@ import {
   DollarSign, 
   Download,
   CheckCircle2,
-  Stethoscope
+  Stethoscope,
+  AlertTriangle,
+  CheckSquare,
+  Square,
+  X
 } from 'lucide-react';
 import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN } from '../types';
 import { CoverageSliderFilter } from './CoverageSliderFilter';
@@ -23,6 +27,7 @@ interface TableViewProps {
   onViewRecord: (record: DentureRecord) => void;
   onEditRecord: (record: DentureRecord) => void;
   onDeleteRecord: (id: string) => void;
+  onBatchDeleteRecords?: (ids: string[]) => void;
   selectedDoctorFilter?: string;
   onClearDoctorFilter?: () => void;
   onExportCsv: () => void;
@@ -34,6 +39,7 @@ export const TableView: React.FC<TableViewProps> = ({
   onViewRecord,
   onEditRecord,
   onDeleteRecord,
+  onBatchDeleteRecords,
   selectedDoctorFilter = 'all',
   onClearDoctorFilter,
   onExportCsv,
@@ -46,6 +52,9 @@ export const TableView: React.FC<TableViewProps> = ({
   const [coverageSubItem, setCoverageSubItem] = useState('all');
   const [sortBy, setSortBy] = useState<'date' | 'name' | 'labCost' | 'hn'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [recordToDelete, setRecordToDelete] = useState<DentureRecord | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
 
   // Keep local filter synced with prop
   React.useEffect(() => {
@@ -295,7 +304,28 @@ export const TableView: React.FC<TableViewProps> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-zinc-50/90 dark:bg-zinc-950/70 border-b border-zinc-200/80 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400 font-semibold">
-                <th className="py-3 px-4 w-12 text-center">#</th>
+                <th className="py-3 px-3 w-10 text-center">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (selectedIds.size === filteredRecords.length && filteredRecords.length > 0) {
+                        setSelectedIds(new Set());
+                      } else {
+                        setSelectedIds(new Set(filteredRecords.map(r => r.id)));
+                      }
+                    }}
+                    className="p-1 rounded text-zinc-400 hover:text-blue-600 transition-colors"
+                    title={selectedIds.size === filteredRecords.length && filteredRecords.length > 0 ? 'ยกเลิกเลือกทั้งหมด' : 'เลือกทั้งหมด'}
+                  >
+                    {selectedIds.size > 0 && selectedIds.size === filteredRecords.length ? (
+                      <CheckSquare className="w-4 h-4 text-blue-600" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
+                </th>
+                <th className="py-3 px-3 w-10 text-center">#</th>
                 <th className="py-3 px-4">HN & ชื่อผู้ป่วย</th>
                 <th className="py-3 px-3">วันที่บริการ</th>
                 <th className="py-3 px-4">ทันตแพทย์ผู้รักษา</th>
@@ -311,7 +341,7 @@ export const TableView: React.FC<TableViewProps> = ({
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-zinc-400">
+                  <td colSpan={12} className="py-12 text-center text-zinc-400">
                     ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา
                   </td>
                 </tr>
@@ -319,10 +349,34 @@ export const TableView: React.FC<TableViewProps> = ({
                 filteredRecords.map((r, idx) => (
                   <tr
                     key={r.id}
-                    className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors group cursor-pointer"
+                    className={`hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition-colors group cursor-pointer ${
+                      selectedIds.has(r.id) ? 'bg-blue-50/40 dark:bg-blue-950/20' : ''
+                    }`}
                     onClick={() => onViewRecord(r)}
                   >
-                    <td className="py-3 px-4 text-center text-zinc-400 font-mono">
+                    <td className="py-3 px-3 text-center" onClick={e => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(r.id)) next.delete(r.id);
+                            else next.add(r.id);
+                            return next;
+                          });
+                        }}
+                        className="p-1 rounded text-zinc-400 hover:text-blue-600 transition-colors"
+                      >
+                        {selectedIds.has(r.id) ? (
+                          <CheckSquare className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <Square className="w-4 h-4" />
+                        )}
+                      </button>
+                    </td>
+
+                    <td className="py-3 px-3 text-center text-zinc-400 font-mono">
                       {idx + 1}
                     </td>
 
@@ -390,27 +444,35 @@ export const TableView: React.FC<TableViewProps> = ({
                     <td className="py-3 px-4 text-center" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-center space-x-1">
                         <button
-                          onClick={() => onViewRecord(r)}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onViewRecord(r);
+                          }}
                           className="p-1.5 rounded-lg text-zinc-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition-colors"
                           title="ดูรายละเอียดชาร์ต"
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => onEditRecord(r)}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditRecord(r);
+                          }}
                           className="p-1.5 rounded-lg text-zinc-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors"
                           title="แก้ไข"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => {
-                            if (confirm(`ต้องการลบรายการ ${r.patientName} (HN: ${r.hn}) หรือไม่?`)) {
-                              onDeleteRecord(r.id);
-                            }
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRecordToDelete(r);
                           }}
                           className="p-1.5 rounded-lg text-zinc-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
-                          title="ลบ"
+                          title="ลบรายการ"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -422,7 +484,7 @@ export const TableView: React.FC<TableViewProps> = ({
             </tbody>
             <tfoot className="bg-zinc-50/90 dark:bg-zinc-950/80 font-semibold border-t-2 border-zinc-300 dark:border-zinc-700 text-xs">
               <tr>
-                <td colSpan={7} className="py-3 px-4 text-right text-zinc-900 dark:text-zinc-100">
+                <td colSpan={8} className="py-3 px-4 text-right text-zinc-900 dark:text-zinc-100">
                   รวมจำนวนเงินแถวสุดท้าย ({filteredRecords.length} ราย):
                 </td>
                 <td className="py-3 px-3 text-right text-emerald-600 dark:text-emerald-400 font-mono">
@@ -451,24 +513,49 @@ export const TableView: React.FC<TableViewProps> = ({
             <div
               key={r.id}
               onClick={() => onViewRecord(r)}
-              className="p-4 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-3 cursor-pointer"
+              className={`p-4 rounded-3xl bg-white dark:bg-zinc-900 border shadow-xs space-y-3 cursor-pointer transition-colors ${
+                selectedIds.has(r.id)
+                  ? 'border-blue-500 bg-blue-50/20 dark:bg-blue-950/20'
+                  : 'border-zinc-200/80 dark:border-zinc-800'
+              }`}
             >
               <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs font-bold text-zinc-400">#{idx + 1}</span>
-                    <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                      {isPdpaMode ? maskPatientName(r.patientName) : r.patientName}
-                    </h4>
-                    {isPdpaMode && (
-                      <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                        PDPA
-                      </span>
+                <div className="flex items-start space-x-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(r.id)) next.delete(r.id);
+                        else next.add(r.id);
+                        return next;
+                      });
+                    }}
+                    className="p-1 -ml-1 text-zinc-400 hover:text-blue-600 transition-colors"
+                  >
+                    {selectedIds.has(r.id) ? (
+                      <CheckSquare className="w-4 h-4 text-blue-600" />
+                    ) : (
+                      <Square className="w-4 h-4" />
                     )}
+                  </button>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-bold text-zinc-400">#{idx + 1}</span>
+                      <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                        {isPdpaMode ? maskPatientName(r.patientName) : r.patientName}
+                      </h4>
+                      {isPdpaMode && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                          PDPA
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-400 font-mono mt-0.5">
+                      HN: {isPdpaMode ? maskHN(r.hn) : r.hn} • {r.date}
+                    </p>
                   </div>
-                  <p className="text-xs text-zinc-400 font-mono mt-0.5">
-                    HN: {isPdpaMode ? maskHN(r.hn) : r.hn} • {r.date}
-                  </p>
                 </div>
 
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
@@ -510,18 +597,24 @@ export const TableView: React.FC<TableViewProps> = ({
 
                 <div className="flex items-center space-x-2" onClick={e => e.stopPropagation()}>
                   <button
-                    onClick={() => onEditRecord(r)}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditRecord(r);
+                    }}
                     className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"
+                    title="แก้ไข"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm(`ต้องการลบรายการ ${r.patientName} หรือไม่?`)) {
-                        onDeleteRecord(r.id);
-                      }
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRecordToDelete(r);
                     }}
                     className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400"
+                    title="ลบรายการ"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -547,6 +640,122 @@ export const TableView: React.FC<TableViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Floating Batch Selection Bar */}
+      {selectedIds.size > 0 && (
+        <div className="sticky bottom-20 sm:bottom-4 z-40 p-3 bg-zinc-900/95 dark:bg-zinc-800/95 backdrop-blur-md text-white rounded-2xl shadow-2xl flex items-center justify-between border border-zinc-700/60 max-w-md mx-auto animate-in slide-in-from-bottom-2 duration-200">
+          <div className="flex items-center space-x-2 text-xs">
+            <span className="font-bold bg-blue-600 px-2.5 py-0.5 rounded-full text-white font-mono">
+              {selectedIds.size}
+            </span>
+            <span className="font-medium">รายการที่เลือก</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 rounded-xl text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-200 transition-colors"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowBatchDeleteModal(true)}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition-colors flex items-center space-x-1.5 shadow-sm"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>ลบที่เลือก ({selectedIds.size})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Single Record Delete Confirmation Modal */}
+      {recordToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-100">ยืนยันการลบข้อมูล</h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                คุณต้องการลบข้อมูลของ <strong>{recordToDelete.patientName}</strong> (HN: {recordToDelete.hn}) ชนิด {recordToDelete.dentureType} ใช่หรือไม่?
+              </p>
+              <div className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400 font-mono bg-zinc-50 dark:bg-zinc-800/60 p-2.5 rounded-xl text-left space-y-1 border border-zinc-100 dark:border-zinc-800">
+                <div>👨‍⚕️ ทันตแพทย์: {recordToDelete.doctor}</div>
+                <div>🦷 ชนิดฟันปลอม: {recordToDelete.dentureType}</div>
+                <div>📅 วันที่บริการ: {recordToDelete.date}</div>
+              </div>
+            </div>
+            <div className="flex items-center justify-center space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setRecordToDelete(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteRecord(recordToDelete.id);
+                  setRecordToDelete(null);
+                }}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors flex items-center space-x-1.5 shadow-sm"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>ยืนยันลบรายการ</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Delete Confirmation Modal */}
+      {showBatchDeleteModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-base text-zinc-900 dark:text-zinc-100">ยืนยันลบหลายรายการพร้อมกัน</h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                คุณต้องการลบข้อมูลที่เลือกไว้ทั้งหมด <strong className="text-rose-600 font-bold text-sm">{selectedIds.size}</strong> รายการใช่หรือไม่?
+              </p>
+              <p className="text-[11px] text-zinc-400 mt-1">
+                ระบบจะลบข้อมูลออกจากฐานข้อมูลทั้งในเครื่องและคลาวด์
+              </p>
+            </div>
+            <div className="flex items-center justify-center space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBatchDeleteModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onBatchDeleteRecords) {
+                    onBatchDeleteRecords(Array.from(selectedIds));
+                  } else {
+                    selectedIds.forEach(id => onDeleteRecord(id));
+                  }
+                  setSelectedIds(new Set());
+                  setShowBatchDeleteModal(false);
+                }}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors flex items-center space-x-1.5 shadow-sm"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>ยืนยันลบ {selectedIds.size} รายการ</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
