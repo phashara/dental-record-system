@@ -814,11 +814,11 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                       />
                     </div>
 
-                    {/* Coverage (5 Categories) */}
+                    {/* Coverage (7 Categories) */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
                         <label className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-                          สิทธิการรักษา (5 หมวด)
+                          สิทธิการรักษา (7 หมวด)
                         </label>
                         {(() => {
                           const res = resolveCoverage(rec.coverage);

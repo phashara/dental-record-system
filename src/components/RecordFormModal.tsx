@@ -21,7 +21,7 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
     age: '',
     gender: 'หญิง',
     date: new Date().toISOString().split('T')[0],
-    doctor: DOCTORS_LIST[0]?.name || 'ชิดชนก',
+    doctor: DOCTORS_LIST[0]?.name || 'กนกวรรณ',
     dentureType: 'CD',
     denturePosition: 'บนและล่าง',
     coverage: 'UC 30 บาท',
@@ -43,7 +43,7 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
         age: '',
         gender: 'หญิง',
         date: new Date().toISOString().split('T')[0],
-        doctor: 'ชิดชนก',
+        doctor: DOCTORS_LIST[0]?.name || 'กนกวรรณ',
         dentureType: 'CD (ฟันเทียมทั้งปาก)',
         denturePosition: 'บนและล่าง',
         coverage: 'UC 30 บาท',
@@ -271,7 +271,7 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="font-medium text-zinc-600 dark:text-zinc-300">
-                  สิทธิการรักษา (5 หมวดสิทธิ) *
+                  สิทธิการรักษา (7 หมวดสิทธิ) *
                 </label>
                 {(() => {
                   const res = resolveCoverage(formData.coverage);

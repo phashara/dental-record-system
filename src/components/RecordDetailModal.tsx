@@ -114,7 +114,7 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
                 </span>
               </div>
               <div className="col-span-2 sm:col-span-3">
-                <span className="text-zinc-400 block text-[11px] mb-1">สิทธิการรักษา (5 หมวดสิทธิ):</span>
+                <span className="text-zinc-400 block text-[11px] mb-1">สิทธิการรักษา (7 หมวดสิทธิ):</span>
                 {(() => {
                   const cov = resolveCoverage(record.coverage);
                   const catGroup = COVERAGE_CATEGORIES.find(c => c.name === (record.coverageGroup || cov.group)) || COVERAGE_CATEGORIES[0];

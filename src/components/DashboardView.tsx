@@ -503,19 +503,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Coverage Types Breakdown (5 Categorized Groups) */}
+        {/* Coverage Types Breakdown (7 Categorized Groups) */}
         <div className="p-6 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
             <div>
               <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                สิทธิการรักษาพยาบาล (5 หมวดสิทธิ)
+                สิทธิการรักษาพยาบาล (7 หมวดสิทธิ)
               </h3>
               <p className="text-[11px] text-zinc-400 mt-0.5">
-                UC • ใช้สิทธิจ่ายตรง • พรบ. • ชำระเงินเอง • อื่นๆ
+                UC • จ่ายตรง • พรบ. • ชำระเอง • เบิกต้นสังกัด/รัฐวิสาหกิจ • ประกันสังคม • อื่นๆ
               </p>
             </div>
             <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium">
-              5 หมวดหมู่
+              7 หมวดหมู่
             </span>
           </div>
 

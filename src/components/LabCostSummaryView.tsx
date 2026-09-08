@@ -154,14 +154,14 @@ export const LabCostSummaryView: React.FC<LabCostSummaryViewProps> = ({
         <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
           <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center space-x-2">
             <Shield className="w-4 h-4 text-emerald-600" />
-            <span>ค่าใช้จ่าย LAB จำแนกตามสิทธิการรักษา (5 หมวดสิทธิ)</span>
+            <span>ค่าใช้จ่าย LAB จำแนกตามสิทธิการรักษา (7 หมวดสิทธิ)</span>
           </h3>
           <span className="text-xs text-zinc-400">
-            UC • จ่ายตรง • พรบ. • ชำระเอง • อื่นๆ
+            UC • จ่ายตรง • พรบ. • ชำระเอง • เบิกต้นสังกัด/รัฐวิสาหกิจ • ประกันสังคม • อื่นๆ
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
           {labByCoverage.map((cat, idx) => (
             <div
               key={cat.id}

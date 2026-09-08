@@ -1,11 +1,22 @@
-export type DoctorName = 'ทพญ.ชิดชนก' | 'ทพญ.วีรยา' | 'ทพญ.จิณณพัต' | 'ทพญ.กนกวรรณ' | 'ทพญ.ศศิมนต์' | string;
+export type DoctorName =
+  | 'ทพญ.กนกวรรณ พัฒนกิจจารักษ์'
+  | 'ทพญ.ศศิมนต์ วงศ์วัชรานนท์'
+  | 'ทพญ.ชิดชนก สถิรวิชย์'
+  | 'ทพญ.วีรยา จารุวัต'
+  | 'ทพญ.จิณณพัต อินทร์ยัง'
+  | 'กนกวรรณ'
+  | 'ศศิมนต์'
+  | 'ชิดชนก'
+  | 'วีรยา'
+  | 'จิณณพัต'
+  | string;
 
 export const DOCTORS_LIST = [
-  { name: 'ชิดชนก', fullName: 'ทพญ.ชิดชนก', color: 'bg-emerald-500' },
-  { name: 'วีรยา', fullName: 'ทพญ.วีรยา', color: 'bg-amber-500' },
-  { name: 'จิณณพัต', fullName: 'ทพญ.จิณณพัต', color: 'bg-indigo-500' },
-  { name: 'กนกวรรณ', fullName: 'ทพญ.กนกวรรณ', color: 'bg-teal-500' },
-  { name: 'ศศิมนต์', fullName: 'ทพญ.ศศิมนต์', color: 'bg-purple-500' },
+  { name: 'กนกวรรณ', fullName: 'ทพญ.กนกวรรณ พัฒนกิจจารักษ์', color: 'bg-teal-500' },
+  { name: 'ศศิมนต์', fullName: 'ทพญ.ศศิมนต์ วงศ์วัชรานนท์', color: 'bg-purple-500' },
+  { name: 'ชิดชนก', fullName: 'ทพญ.ชิดชนก สถิรวิชย์', color: 'bg-emerald-500' },
+  { name: 'วีรยา', fullName: 'ทพญ.วีรยา จารุวัต', color: 'bg-amber-500' },
+  { name: 'จิณณพัต', fullName: 'ทพญ.จิณณพัต อินทร์ยัง', color: 'bg-indigo-500' },
 ] as const;
 
 // ---------------- DENTURE TYPE CLASSIFICATION & KNOWLEDGE BASE ----------------
@@ -174,8 +185,24 @@ export const COVERAGE_CATEGORIES: CoverageCategoryGroup[] = [
     color: 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800/40',
     badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800/50',
     items: [
-      'เบิกต้นสังกัด/รัฐวิสาหกิจ',
       'ชำระเงินเอง',
+    ],
+  },
+  {
+    id: 'state_enterprise',
+    name: 'เบิกต้นสังกัด / รัฐวิสาหกิจ',
+    color: 'text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/50 border-cyan-200 dark:border-cyan-800/40',
+    badgeClass: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800/50',
+    items: [
+      'เบิกต้นสังกัด / รัฐวิสาหกิจ',
+    ],
+  },
+  {
+    id: 'social_security',
+    name: 'ประกันสังคม',
+    color: 'text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800/40',
+    badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border-rose-200 dark:border-rose-800/50',
+    items: [
       'ประกันสังคม',
     ],
   },
@@ -198,17 +225,17 @@ export function resolveCoverage(raw: string | undefined): { group: string; subIt
 
   const clean = raw.trim();
 
-  // If already formatted like "UC - อสม/ครอบครัว อสม" or "ใช้สิทธิจ่ายตรง - ต้นสังกัด (ระบบจ่ายตรง)"
+  // Exact matching against configured categories
   for (const cat of COVERAGE_CATEGORIES) {
     for (const item of cat.items) {
-      if (clean === item || clean === `${cat.name} - ${item}` || clean === `${cat.name} (${item})`) {
+      if (clean === item || clean === `${cat.name} - ${item}` || clean === `${cat.name} (${item})` || clean === `${cat.name} • ${item}`) {
         return { group: cat.name, subItem: item, fullDisplay: `${cat.name} • ${item}` };
       }
     }
   }
 
   // Fuzzy matching
-  if (clean.includes('จ่ายตรง') || clean.includes('ต้นสังกัด')) {
+  if (clean.includes('จ่ายตรง') || clean.includes('ต้นสังกัด (ระบบจ่ายตรง)')) {
     const sub = clean.includes('กทม') || clean.includes('อปท') ? 'เบิกจ่ายตรง กทม./อปท.' : 'ต้นสังกัด (ระบบจ่ายตรง)';
     return { group: 'ใช้สิทธิจ่ายตรง', subItem: sub, fullDisplay: `ใช้สิทธิจ่ายตรง • ${sub}` };
   }
@@ -218,11 +245,11 @@ export function resolveCoverage(raw: string | undefined): { group: string; subIt
   }
 
   if (clean.includes('ประกันสังคม')) {
-    return { group: 'ชำระเงินเอง', subItem: 'ประกันสังคม', fullDisplay: 'ชำระเงินเอง • ประกันสังคม' };
+    return { group: 'ประกันสังคม', subItem: 'ประกันสังคม', fullDisplay: 'ประกันสังคม • ประกันสังคม' };
   }
 
-  if (clean.includes('รัฐวิสาหกิจ')) {
-    return { group: 'ชำระเงินเอง', subItem: 'เบิกต้นสังกัด/รัฐวิสาหกิจ', fullDisplay: 'ชำระเงินเอง • เบิกต้นสังกัด/รัฐวิสาหกิจ' };
+  if (clean.includes('รัฐวิสาหกิจ') || clean.includes('เบิกต้นสังกัด')) {
+    return { group: 'เบิกต้นสังกัด / รัฐวิสาหกิจ', subItem: 'เบิกต้นสังกัด / รัฐวิสาหกิจ', fullDisplay: 'เบิกต้นสังกัด / รัฐวิสาหกิจ • เบิกต้นสังกัด / รัฐวิสาหกิจ' };
   }
 
   if (clean.includes('ชำระ') || clean.includes('จ่ายเอง')) {
@@ -273,8 +300,8 @@ export interface DentureRecord {
   doctor: DoctorName;
   dentureType: string; // CD, APD, UTP, LTP, CD/TP, ซ่อม
   denturePosition?: string; // บน, ล่าง, บนและล่าง, etc.
-  coverage: string; // สิทธิการรักษาตาม 5 หมวดหมู่ใหม่
-  coverageGroup?: string; // 1. UC, 2. ใช้สิทธิจ่ายตรง, 3. พรบ., 4. ชำระเงินเอง, 5. อื่นๆ
+  coverage: string; // สิทธิการรักษาตาม 7 หมวดหมู่ใหม่
+  coverageGroup?: string; // 1. UC, 2. ใช้สิทธิจ่ายตรง, 3. พรบ., 4. ชำระเงินเอง, 5. เบิกต้นสังกัด / รัฐวิสาหกิจ, 6. ประกันสังคม, 7. อื่นๆ
   labCost: number; // ค่าแลป (เขียนด้วยลายมือ/พิมพ์)
   treatmentFee: number; // รวมค่าใช้จ่ายทั้งสิ้น
   note?: string; // Dental note / ลายมือแพทย์

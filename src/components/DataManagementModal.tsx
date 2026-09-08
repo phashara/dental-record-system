@@ -343,7 +343,7 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
               <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 space-y-2.5">
                 <h4 className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center space-x-2">
                   <Layers className="w-4 h-4 text-blue-500" />
-                  <span>สัดส่วนสิทธิการรักษา 5 หมวด</span>
+                  <span>สัดส่วนสิทธิการรักษา 7 หมวด</span>
                 </h4>
                 <div className="space-y-1.5">
                   {COVERAGE_CATEGORIES.map((cat, i) => {
@@ -407,7 +407,7 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
                   <span>โครงสร้างรายงานที่ส่งออก (Grouped Export):</span>
                 </p>
                 <ul className="list-disc list-inside space-y-0.5 text-[11px] text-zinc-600 dark:text-zinc-400 pl-1">
-                  <li><strong>จำแนกแยกตามสิทธิการรักษา 5 หมวด</strong> เป็นตารางเฉพาะแต่ละสิทธิ (รวมทุกสิทธิในไฟล์เดียว)</li>
+                  <li><strong>จำแนกแยกตามสิทธิการรักษา 7 หมวด</strong> เป็นตารางเฉพาะแต่ละสิทธิ (รวมทุกสิทธิในไฟล์เดียว)</li>
                   <li><strong>คอลัมน์มาตรฐาน:</strong> ลำดับ | รหัส | ชื่อ - สกุล | HN | สิทธิการรักษา | ทันตแพทย์ (5 ท่าน) | วัน Insert | จำนวนเงิน (บาท)</li>
                   <li><strong>แถวสรุปท้ายแต่ละสิทธิ:</strong> สรุปจำนวนเคส, ยอดรวมเงิน, ค่าเฉลี่ยต่อเคส และรายชื่อทันตแพทย์</li>
                   <li><strong>แถวสุดท้าย:</strong> รวมจำนวนเงินทั้งสิ้น พร้อมใส่ <strong>คำอ่านภาษาไทย (บาทถ้วน)</strong></li>
@@ -648,7 +648,7 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
                       <span>รายงานทะเบียนฟันปลอมฉบับสมบูรณ์ (ชื่อคนไข้จริง &amp; HN เต็ม)</span>
                     </h4>
                     <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                      แสดงชื่อ-นามสกุลจริง, เลข HN โรงพยาบาล, ชนิดฟันปลอม, สิทธิการรักษา 5 หมวด, ค่าใช้จ่าย และทันตแพทย์ผู้รักษา (5 ท่าน) ครบถ้วนตามช่วงวันที่กำหนด
+                      แสดงชื่อ-นามสกุลจริง, เลข HN โรงพยาบาล, ชนิดฟันปลอม, สิทธิการรักษา 7 หมวด, ค่าใช้จ่าย และทันตแพทย์ผู้รักษา (5 ท่าน) ครบถ้วนตามช่วงวันที่กำหนด
                     </p>
                   </div>
                 </div>

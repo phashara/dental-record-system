@@ -15,7 +15,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
   onFilterDoctorInTable,
   isPdpaMode = false,
 }) => {
-  const [selectedDoctor, setSelectedDoctor] = useState<string>(DOCTORS_LIST[0]?.name || 'ชิดชนก');
+  const [selectedDoctor, setSelectedDoctor] = useState<string>(DOCTORS_LIST[0]?.name || 'กนกวรรณ');
 
   // Compute stats for all 5 doctors
   const doctorsData = DOCTORS_LIST.map(doc => {
