@@ -281,25 +281,108 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
     try {
       setOcrStep('📋 กำลังตรวจหา HN, ชื่อ-สกุล, วินิจฉัย และตารางบริการ...');
       
-      const res = await fetch('/api/ocr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: base64Image,
-          mimeType: 'image/jpeg',
-        }),
-      });
+      let ocrData: any = null;
+      let apiSuccess = false;
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error ${res.status}`);
+      // 1. Try server endpoint first (Vercel / Node server)
+      try {
+        const res = await fetch('/api/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageBase64: base64Image,
+            mimeType: 'image/jpeg',
+          }),
+        });
+
+        if (res.ok) {
+          const result = await res.json();
+          ocrData = result.data || {};
+          apiSuccess = true;
+        }
+      } catch (err) {
+        // Fallback to client-side direct API call on static hosts like GitHub Pages
+      }
+
+      // 2. Client-side fallback for GitHub Pages (when /api/ocr is 404)
+      if (!apiSuccess) {
+        const clientApiKey = ((import.meta as any).env?.VITE_GEMINI_API_KEY as string) || '';
+        if (clientApiKey) {
+          setOcrStep('🌐 กำลังประมวลผลผ่าน Gemini API (Client Mode บน GitHub Pages)...');
+          const cleanBase64 = base64Image.replace(/^data:image\/\w+;base64,/, '');
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`;
+          const geminiRes = await fetch(geminiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: `คุณคือผู้เชี่ยวชาญการอ่านเอกสารทางทันตกรรมและเวชระเบียนผู้ป่วยนอก (OPD Card) ของโรงพยาบาลพยุหะคีรี
+เอกสารในภาพเป็นเอกสารบันทึกการรักษาฟันปลอม (Denture Treatment Record) ซึ่งอาจเป็น:
+1. การ์ด OPD ทันตกรรม (ใบตรวจผู้ป่วยนอก) มีช่อง HN, ชื่อ-สกุล, วันที่, การวินิจฉัย (Diagnosis เช่น K081 Loss of teeth), ตารางหัตถการ, ค่าแลป, ลายเซ็นทันตแพทย์
+2. ใบทับเบียนฟันปลอม หรือ บัญชีรายชื่อผู้รับบริการฟันปลอม (ตารางหลายแถว)
+
+รายชื่อทันตแพทย์ 5 ท่านในระบบ (จับคู่ชื่อแพทย์กับ 5 ท่านนี้):
+1. ทพญ.ชิดชนก
+2. ทพญ.วีรยา
+3. ทพญ.จิณณพัต
+4. ทพญ.กนกวรรณ
+5. ทพญ.ศศิมนต์
+
+กรุณาวิเคราะห์ภาพอย่างละเอียด และส่งออกผลลัพธ์เป็น JSON ล้วนในโครงสร้าง:
+{
+  "documentType": "OPD_CARD หรือ DENTURE_REGISTRY_TABLE",
+  "confidenceScore": 0.95,
+  "records": [
+    {
+      "hn": "เลข HN",
+      "patientName": "ชื่อ-สกุล",
+      "age": "อายุ",
+      "gender": "ชาย หรือ หญิง",
+      "date": "YYYY-MM-DD",
+      "doctor": "ชื่อแพทย์ 1 ใน 5 ท่าน",
+      "dentureType": "เช่น CD, APD, UTP, ซ่อม",
+      "denturePosition": "บน, ล่าง, บนและล่าง",
+      "coverage": "สิทธิการรักษา เช่น 30 บาท, อสม, ต้นสังกัด (ระบบจ่ายตรง), ชำระเงินเอง",
+      "labCost": 0,
+      "treatmentFee": 0,
+      "diagnosis": "K081 Loss of teeth",
+      "note": "สรุปรายละเอียดและบันทึกลายมือแพทย์"
+    }
+  ]
+}`,
+                    },
+                    {
+                      inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: cleanBase64,
+                      },
+                    },
+                  ],
+                },
+              ],
+              generationConfig: {
+                responseMimeType: 'application/json',
+              },
+            }),
+          });
+
+          if (geminiRes.ok) {
+            const geminiJson = await geminiRes.json();
+            const text = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              ocrData = JSON.parse(text);
+              apiSuccess = true;
+            }
+          }
+        }
       }
 
       setOcrStep('✍️ กำลังถอดรหัสลายมือแพทย์ & ค่าใช้จ่าย LAB...');
-      const result = await res.json();
-      const ocrData = result.data || {};
 
-      if (ocrData.records && ocrData.records.length > 0) {
+      if (ocrData && ocrData.records && ocrData.records.length > 0) {
         const records: DentureRecord[] = ocrData.records.map((r: any, idx: number) => ({
           id: `rec-ocr-${Date.now()}-${idx}`,
           hn: r.hn || '',

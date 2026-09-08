@@ -5,7 +5,7 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
-    // Relative path './' ช่วยให้ assets (CSS, JS, images) โหลดได้ถูกต้องบน GitHub Pages ทุก Subpath
+    // Relative path './' ensures all assets (CSS, JS, images) load properly on GitHub Pages
     base: process.env.VITE_BASE_PATH || './',
     plugins: [react(), tailwindcss()],
     resolve: {
