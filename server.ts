@@ -1,4 +1,4 @@
-import app, { DOCTORS } from './server/app';
+import app, { DOCTORS } from './api/index';
 import path from 'path';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
