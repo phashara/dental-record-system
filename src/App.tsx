@@ -154,17 +154,23 @@ export default function App() {
   };
 
   const handleDeleteRecord = async (id: string) => {
+    if (selectedRecordForDetail?.id === id) {
+      setSelectedRecordForDetail(null);
+    }
     await dentureStorage.deleteRecord(id);
     const updated = dentureStorage.getLocalRecords();
     setRecords(updated);
-    showToast('ลบรายการเรียบร้อยแล้ว');
+    showToast('🗑️ ลบรายการเรียบร้อยแล้ว');
   };
 
   const handleBatchDeleteRecords = async (ids: string[]) => {
+    if (selectedRecordForDetail && ids.includes(selectedRecordForDetail.id)) {
+      setSelectedRecordForDetail(null);
+    }
     await dentureStorage.batchDeleteRecords(ids);
     const updated = dentureStorage.getLocalRecords();
     setRecords(updated);
-    showToast(`ลบข้อมูลเรียบร้อยแล้ว ${ids.length} รายการ`);
+    showToast(`🗑️ ลบข้อมูลเรียบร้อยแล้ว ${ids.length} รายการ`);
   };
 
   const handleSelectDoctorFilter = (docName: string) => {

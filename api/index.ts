@@ -50,24 +50,11 @@ function getAI(): GoogleGenAI {
   return aiClient;
 }
 
-// Initial seed data loader
+// Initial seed data loader - returns empty array for clean production state
 const getInitialSeed = () => {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
-      return Array.isArray(parsed) ? parsed : (parsed.records || []);
-    }
-    const rootDbFile = path.join(process.cwd(), 'data', 'denture_records.json');
-    if (fs.existsSync(rootDbFile)) {
-      const parsed = JSON.parse(fs.readFileSync(rootDbFile, 'utf-8'));
-      return Array.isArray(parsed) ? parsed : (parsed.records || []);
-    }
-  } catch (e) {
-    console.error('Error loading seed from file', e);
-  }
   return [];
 };
-const SEED_RECORDS = getInitialSeed();
+const SEED_RECORDS: any[] = [];
 
 // Normalizes coverage according to 5 exact categories
 function normalizeCoverage(raw: string | undefined): { group: string; subItem: string } {
@@ -123,21 +110,7 @@ function getRecords() {
     console.error('Error reading DB:', err);
   }
 
-  const normalizedSeed = SEED_RECORDS.map((r: any) => {
-    const norm = normalizeCoverage(r.coverage);
-    return {
-      ...r,
-      coverageGroup: norm.group,
-      coverage: norm.subItem,
-    };
-  });
-
-  try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(normalizedSeed, null, 2));
-  } catch (e) {
-    // Non-fatal if filesystem is read-only
-  }
-  return normalizedSeed;
+  return [];
 }
 
 function saveRecords(records: any[]) {
