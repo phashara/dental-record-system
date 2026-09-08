@@ -310,7 +310,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
         if (clientApiKey) {
           setOcrStep('🌐 กำลังประมวลผลผ่าน Gemini API (Client Mode บน GitHub Pages)...');
           const cleanBase64 = base64Image.replace(/^data:image\/\w+;base64,/, '');
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`;
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${clientApiKey}`;
           const geminiRes = await fetch(geminiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
