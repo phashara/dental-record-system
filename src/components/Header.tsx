@@ -110,19 +110,19 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right Action Tools */}
           <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Online/Offline status badge */}
+            {/* Firebase Cloud Firestore Real-time status badge */}
             <div
-              className={`hidden sm:flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-medium border ${
+              className={`hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
                 isOnline
                   ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40'
                   : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/40'
               }`}
-              title={isOnline ? 'เชื่อมต่อออนไลน์ พร้อมซิงค์' : 'โหมดออฟไลน์ ข้อมูลบันทึกในเครื่อง'}
+              title={isOnline ? 'เชื่อมต่อ Firebase Cloud Firestore เรียลไทม์ ซิงค์สดทุกอุปกรณ์' : 'โหมดออฟไลน์ ข้อมูลบันทึกในเครื่อง'}
             >
               {isOnline ? (
                 <>
-                  <Wifi className="w-3.5 h-3.5" />
-                  <span>ออนไลน์</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Cloud ซิงค์สด</span>
                 </>
               ) : (
                 <>

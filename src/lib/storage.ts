@@ -1,8 +1,20 @@
 import { DentureRecord, resolveCoverage, maskPatientName, maskHN } from '../types';
 import { thaiBahtText } from './bahtText';
+import { db, handleFirestoreError, OperationType } from './firebase';
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  writeBatch,
+  onSnapshot,
+  Unsubscribe,
+} from 'firebase/firestore';
 
-const LOCAL_STORAGE_KEY = 'denture_records_cache_v3';
-const OFFLINE_QUEUE_KEY = 'denture_offline_queue_v1';
+const LOCAL_STORAGE_KEY = 'denture_records_cache_v4';
+const OFFLINE_QUEUE_KEY = 'denture_offline_queue_v2';
+const FIRESTORE_COLLECTION = 'denture_records';
 
 export interface ExportFilterOptions {
   anonymize?: boolean;
@@ -17,18 +29,23 @@ export class DentureStorageService {
   private static instance: DentureStorageService;
   private isOnlineStatus: boolean = typeof navigator !== 'undefined' ? navigator.onLine : true;
   private listeners: ((records: DentureRecord[], isOnline: boolean) => void)[] = [];
+  private firestoreUnsubscribe: Unsubscribe | null = null;
+  private isSeeding: boolean = false;
 
   private constructor() {
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => {
         this.isOnlineStatus = true;
-        this.syncQueueWithServer();
+        this.syncQueueWithFirestore();
         this.notify();
       });
       window.addEventListener('offline', () => {
         this.isOnlineStatus = false;
         this.notify();
       });
+
+      // Initialize real-time Cloud Firestore synchronization
+      this.initFirestoreRealtimeListener();
     }
   }
 
@@ -37,6 +54,51 @@ export class DentureStorageService {
       DentureStorageService.instance = new DentureStorageService();
     }
     return DentureStorageService.instance;
+  }
+
+  // Setup real-time listener for Firestore collection
+  private initFirestoreRealtimeListener() {
+    try {
+      if (this.firestoreUnsubscribe) {
+        this.firestoreUnsubscribe();
+      }
+
+      const recordsCol = collection(db, FIRESTORE_COLLECTION);
+      this.firestoreUnsubscribe = onSnapshot(
+        recordsCol,
+        snapshot => {
+          if (!snapshot.empty) {
+            const list: DentureRecord[] = [];
+            snapshot.forEach(docSnap => {
+              const data = docSnap.data() as DentureRecord;
+              list.push(this.normalizeRecordCoverage({ ...data, id: data.id || docSnap.id }));
+            });
+
+            // Sort newest date / createdAt first
+            list.sort((a, b) => {
+              const tA = new Date(b.date || b.createdAt || 0).getTime();
+              const tB = new Date(a.date || a.createdAt || 0).getTime();
+              return tA - tB;
+            });
+
+            this.setLocalRecords(list);
+          } else {
+            // If firestore is empty and we have local records or seed, offer seed
+            this.seedFirestoreFromInitialData();
+          }
+        },
+        error => {
+          console.warn('Firestore onSnapshot listener error:', error);
+          try {
+            handleFirestoreError(error, OperationType.LIST, FIRESTORE_COLLECTION);
+          } catch (e) {
+            // Logged
+          }
+        }
+      );
+    } catch (err) {
+      console.warn('Could not initialize Firestore real-time listener:', err);
+    }
   }
 
   public subscribe(listener: (records: DentureRecord[], isOnline: boolean) => void): () => void {
@@ -88,97 +150,244 @@ export class DentureStorageService {
     }
   }
 
+  // Fetch all records from Firestore (with fallbacks to API and local cache)
   public async fetchAllRecords(): Promise<DentureRecord[]> {
     if (this.isOnlineStatus) {
       try {
-        const res = await fetch('/api/records');
-        if (res.ok) {
-          const json = await res.json();
-          const serverRecords: DentureRecord[] = (json.records || []).map((r: DentureRecord) => this.normalizeRecordCoverage(r));
-          this.setLocalRecords(serverRecords);
-          return serverRecords;
+        const recordsCol = collection(db, FIRESTORE_COLLECTION);
+        const snapshot = await getDocs(recordsCol);
+
+        if (!snapshot.empty) {
+          const list: DentureRecord[] = [];
+          snapshot.forEach(d => {
+            const r = d.data() as DentureRecord;
+            list.push(this.normalizeRecordCoverage({ ...r, id: r.id || d.id }));
+          });
+
+          list.sort((a, b) => {
+            const tA = new Date(b.date || b.createdAt || 0).getTime();
+            const tB = new Date(a.date || a.createdAt || 0).getTime();
+            return tA - tB;
+          });
+
+          this.setLocalRecords(list);
+          return list;
+        } else {
+          // Firestore is currently empty, seed from official dataset
+          return await this.seedFirestoreFromInitialData();
         }
-      } catch (err) {
-        console.warn('Network error fetching from server, falling back to local cache', err);
+      } catch (firestoreErr) {
+        console.warn('Firestore fetch failed, checking server API fallback...', firestoreErr);
+        try {
+          handleFirestoreError(firestoreErr, OperationType.GET, FIRESTORE_COLLECTION);
+        } catch (e) {
+          // Fallback proceeds
+        }
+
+        try {
+          const res = await fetch('/api/records');
+          if (res.ok) {
+            const json = await res.json();
+            const serverRecords: DentureRecord[] = (json.records || []).map((r: DentureRecord) =>
+              this.normalizeRecordCoverage(r)
+            );
+            this.setLocalRecords(serverRecords);
+            return serverRecords;
+          }
+        } catch (apiErr) {
+          console.warn('API fallback error:', apiErr);
+        }
       }
     }
     return this.getLocalRecords();
   }
 
+  // Seed Firestore if database is initially empty
+  private async seedFirestoreFromInitialData(): Promise<DentureRecord[]> {
+    if (this.isSeeding) return this.getLocalRecords();
+    this.isSeeding = true;
+    try {
+      let seedData: DentureRecord[] = this.getLocalRecords();
+
+      if (seedData.length === 0) {
+        // Try to load initial seed from API or archive
+        try {
+          const res = await fetch('/api/records');
+          if (res.ok) {
+            const json = await res.json();
+            seedData = (json.records || []).map((r: any) => this.normalizeRecordCoverage(r));
+          }
+        } catch (e) {
+          // Ignored
+        }
+      }
+
+      if (seedData.length > 0) {
+        console.log(`Seeding ${seedData.length} records into Firebase Cloud Firestore...`);
+        // Batch upload in chunks of 450 (Firestore limit is 500 ops per batch)
+        const CHUNK_SIZE = 400;
+        for (let i = 0; i < seedData.length; i += CHUNK_SIZE) {
+          const chunk = seedData.slice(i, i + CHUNK_SIZE);
+          const batch = writeBatch(db);
+          for (const item of chunk) {
+            const itemRef = doc(db, FIRESTORE_COLLECTION, item.id);
+            batch.set(itemRef, item);
+          }
+          await batch.commit();
+        }
+        console.log('Firebase Cloud Firestore initial seeding complete.');
+      }
+      return seedData;
+    } catch (err) {
+      console.warn('Seeding Firestore error:', err);
+      return this.getLocalRecords();
+    } finally {
+      this.isSeeding = false;
+    }
+  }
+
+  // Save or update record (Dual sync: LocalStorage + Firestore + API)
   public async saveRecord(record: DentureRecord): Promise<DentureRecord> {
+    record = this.normalizeRecordCoverage(record);
+    if (!record.id) {
+      record.id = `rec-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    }
+
     const local = this.getLocalRecords();
     const existingIndex = local.findIndex(r => r.id === record.id);
 
+    const recordWithMeta: DentureRecord = {
+      ...record,
+      updatedAt: new Date().toISOString(),
+      createdAt: record.createdAt || (existingIndex >= 0 ? local[existingIndex].createdAt : new Date().toISOString()),
+      synced: false,
+    };
+
     if (existingIndex >= 0) {
-      local[existingIndex] = { ...record, updatedAt: new Date().toISOString() };
+      local[existingIndex] = recordWithMeta;
     } else {
-      local.unshift({ ...record, createdAt: record.createdAt || new Date().toISOString() });
+      local.unshift(recordWithMeta);
     }
     this.setLocalRecords(local);
 
+    // Save directly to Firebase Firestore
     if (this.isOnlineStatus) {
       try {
-        const method = existingIndex >= 0 ? 'PUT' : 'POST';
-        const url = existingIndex >= 0 ? `/api/records/${record.id}` : '/api/records';
-        const res = await fetch(url, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(record),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.record) {
-            record = { ...record, ...data.record, synced: true };
-            const updated = this.getLocalRecords().map(r => r.id === record.id ? { ...record, synced: true } : r);
-            this.setLocalRecords(updated);
-          }
-        }
+        const docRef = doc(db, FIRESTORE_COLLECTION, recordWithMeta.id);
+        await setDoc(docRef, { ...recordWithMeta, synced: true });
+
+        // Update local status as synced
+        const updated = this.getLocalRecords().map(r =>
+          r.id === recordWithMeta.id ? { ...recordWithMeta, synced: true } : r
+        );
+        this.setLocalRecords(updated);
+        recordWithMeta.synced = true;
       } catch (err) {
-        console.warn('Could not sync to server immediately, queued for later', err);
-        this.addToOfflineQueue({ action: existingIndex >= 0 ? 'update' : 'create', record });
+        console.warn('Firestore write failed, queuing for sync:', err);
+        try {
+          handleFirestoreError(err, OperationType.WRITE, `${FIRESTORE_COLLECTION}/${recordWithMeta.id}`);
+        } catch (e) {
+          // Handled
+        }
+        this.addToOfflineQueue({
+          action: existingIndex >= 0 ? 'update' : 'create',
+          record: recordWithMeta,
+        });
       }
+
+      // Also notify local API server for backup
+      try {
+        fetch('/api/records', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(recordWithMeta),
+        }).catch(() => {});
+      } catch (e) {}
     } else {
-      this.addToOfflineQueue({ action: existingIndex >= 0 ? 'update' : 'create', record: { ...record, synced: false } });
+      this.addToOfflineQueue({
+        action: existingIndex >= 0 ? 'update' : 'create',
+        record: recordWithMeta,
+      });
     }
 
-    return record;
+    return recordWithMeta;
   }
 
+  // Save batch records (atomic Firestore batch)
   public async saveBatchRecords(recordsToAdd: DentureRecord[]): Promise<void> {
+    const normalized = recordsToAdd.map(r => {
+      const norm = this.normalizeRecordCoverage(r);
+      if (!norm.id) {
+        norm.id = `rec-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      }
+      return norm;
+    });
+
     const current = this.getLocalRecords();
     const map = new Map(current.map(r => [r.id, r]));
-    recordsToAdd.forEach(r => map.set(r.id, r));
+    normalized.forEach(r => map.set(r.id, r));
     const combined = Array.from(map.values()).sort((a, b) => {
-      return new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime();
+      return new Date(b.date || b.createdAt || 0).getTime() - new Date(a.date || a.createdAt || 0).getTime();
     });
     this.setLocalRecords(combined);
 
     if (this.isOnlineStatus) {
       try {
-        await fetch('/api/records/batch', {
+        const CHUNK_SIZE = 400;
+        for (let i = 0; i < normalized.length; i += CHUNK_SIZE) {
+          const chunk = normalized.slice(i, i + CHUNK_SIZE);
+          const batch = writeBatch(db);
+          for (const item of chunk) {
+            const itemRef = doc(db, FIRESTORE_COLLECTION, item.id);
+            batch.set(itemRef, { ...item, synced: true });
+          }
+          await batch.commit();
+        }
+      } catch (e) {
+        console.warn('Firestore batch write failed, queuing for offline sync:', e);
+        try {
+          handleFirestoreError(e, OperationType.WRITE, FIRESTORE_COLLECTION);
+        } catch (err) {}
+        normalized.forEach(r => this.addToOfflineQueue({ action: 'create', record: r }));
+      }
+
+      // Backup to local API
+      try {
+        fetch('/api/records/batch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ records: recordsToAdd }),
-        });
-      } catch (e) {
-        console.warn('Offline batch queued', e);
-        recordsToAdd.forEach(r => this.addToOfflineQueue({ action: 'create', record: r }));
-      }
+          body: JSON.stringify({ records: normalized }),
+        }).catch(() => {});
+      } catch (e) {}
     } else {
-      recordsToAdd.forEach(r => this.addToOfflineQueue({ action: 'create', record: r }));
+      normalized.forEach(r => this.addToOfflineQueue({ action: 'create', record: r }));
     }
   }
 
+  public async batchAddRecords(incoming: DentureRecord[]): Promise<void> {
+    return this.saveBatchRecords(incoming);
+  }
+
+  // Delete record from Firestore and local cache
   public async deleteRecord(id: string): Promise<void> {
     const local = this.getLocalRecords().filter(r => r.id !== id);
     this.setLocalRecords(local);
 
     if (this.isOnlineStatus) {
       try {
-        await fetch(`/api/records/${id}`, { method: 'DELETE' });
+        const docRef = doc(db, FIRESTORE_COLLECTION, id);
+        await deleteDoc(docRef);
       } catch (e) {
+        console.warn('Firestore delete failed:', e);
+        try {
+          handleFirestoreError(e, OperationType.DELETE, `${FIRESTORE_COLLECTION}/${id}`);
+        } catch (err) {}
         this.addToOfflineQueue({ action: 'delete', record: { id } as any });
       }
+
+      try {
+        fetch(`/api/records/${id}`, { method: 'DELETE' }).catch(() => {});
+      } catch (e) {}
     } else {
       this.addToOfflineQueue({ action: 'delete', record: { id } as any });
     }
@@ -194,7 +403,7 @@ export class DentureStorageService {
     }
   }
 
-  public async syncQueueWithServer(): Promise<number> {
+  public async syncQueueWithFirestore(): Promise<number> {
     try {
       const queueStr = localStorage.getItem(OFFLINE_QUEUE_KEY);
       if (!queueStr) return 0;
@@ -207,14 +416,13 @@ export class DentureStorageService {
       for (const item of queue) {
         try {
           if (item.action === 'create' || item.action === 'update') {
-            await fetch('/api/records', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(item.record),
+            await setDoc(doc(db, FIRESTORE_COLLECTION, item.record.id), {
+              ...item.record,
+              synced: true,
             });
             syncedCount++;
           } else if (item.action === 'delete') {
-            await fetch(`/api/records/${item.record.id}`, { method: 'DELETE' });
+            await deleteDoc(doc(db, FIRESTORE_COLLECTION, item.record.id));
             syncedCount++;
           }
         } catch (e) {
@@ -226,57 +434,34 @@ export class DentureStorageService {
       await this.fetchAllRecords();
       return syncedCount;
     } catch (e) {
-      console.error('Error syncing queue', e);
+      console.error('Error syncing queue with Firestore', e);
       return 0;
     }
   }
 
-  public async batchAddRecords(incoming: DentureRecord[]): Promise<void> {
-    const local = this.getLocalRecords();
-    const map = new Map<string, DentureRecord>(local.map(r => [r.id, r]));
-    incoming.forEach(item => {
-      const normalized = this.normalizeRecordCoverage(item);
-      map.set(normalized.id, normalized);
-    });
-    const updated = Array.from(map.values());
-    this.setLocalRecords(updated);
-
-    if (this.isOnlineStatus) {
-      try {
-        await fetch('/api/records/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ records: incoming }),
-        });
-      } catch (e) {
-        console.warn('Could not sync batch to server', e);
-      }
-    }
+  public async syncQueueWithServer(): Promise<number> {
+    return this.syncQueueWithFirestore();
   }
 
   public async resetToHospitalOfficialData(): Promise<DentureRecord[]> {
-    try {
-      const res = await fetch('/api/records?refresh=' + Date.now(), { cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        const serverRecords: DentureRecord[] = (json.records || []).map((r: DentureRecord) => this.normalizeRecordCoverage(r));
-        this.setLocalRecords(serverRecords);
-        return serverRecords;
-      }
-    } catch (e) {
-      console.error('Error reloading official data', e);
-    }
-    return this.getLocalRecords();
+    return this.restoreRetrospectiveArchive();
   }
 
   public async clearAllRecords(): Promise<void> {
     this.setLocalRecords([]);
     if (this.isOnlineStatus) {
       try {
-        await fetch('/api/records/clear', { method: 'POST' });
+        const snap = await getDocs(collection(db, FIRESTORE_COLLECTION));
+        const batch = writeBatch(db);
+        snap.forEach(d => batch.delete(d.ref));
+        await batch.commit();
       } catch (e) {
-        console.warn('Could not clear server records', e);
+        console.warn('Firestore clear error', e);
       }
+
+      try {
+        fetch('/api/records/clear', { method: 'POST' }).catch(() => {});
+      } catch (e) {}
     }
   }
 
@@ -285,8 +470,13 @@ export class DentureStorageService {
       const res = await fetch('/api/records/restore-archive', { method: 'POST' });
       if (res.ok) {
         const json = await res.json();
-        const serverRecords: DentureRecord[] = (json.records || []).map((r: DentureRecord) => this.normalizeRecordCoverage(r));
+        const serverRecords: DentureRecord[] = (json.records || []).map((r: DentureRecord) =>
+          this.normalizeRecordCoverage(r)
+        );
         this.setLocalRecords(serverRecords);
+
+        // Upload to Cloud Firestore
+        await this.saveBatchRecords(serverRecords);
         return serverRecords;
       }
     } catch (e) {
@@ -331,7 +521,7 @@ export class DentureStorageService {
         return parts[1] === filterOpts.month;
       });
     }
-    
+
     // Group records by Coverage
     const grouped: Record<string, DentureRecord[]> = {};
     records.forEach(r => {
@@ -349,11 +539,11 @@ export class DentureStorageService {
     // Report Header
     const periodText = filterOpts.periodLabel
       ? filterOpts.periodLabel
-      : (filterOpts.startDate && filterOpts.endDate)
-        ? `ระหว่างวันที่ ${filterOpts.startDate} ถึง ${filterOpts.endDate}`
-        : filterOpts.year && filterOpts.year !== 'all'
-          ? `ประจำปี พ.ศ. ${filterOpts.year}`
-          : 'ข้อมูลทั้งหมด (All Records)';
+      : filterOpts.startDate && filterOpts.endDate
+      ? `ระหว่างวันที่ ${filterOpts.startDate} ถึง ${filterOpts.endDate}`
+      : filterOpts.year && filterOpts.year !== 'all'
+      ? `ประจำปี พ.ศ. ${filterOpts.year}`
+      : 'ข้อมูลทั้งหมด (All Records)';
 
     lines.push(`"รายงานทะเบียนผู้ป่วยฟันปลอม จำแนกแยกตามสิทธิการรักษา - โรงพยาบาลพยุหะคีรี"`);
     lines.push(`"ช่วงเวลาข้อมูลที่เลือกส่งออก: ${periodText}"`);
@@ -376,46 +566,54 @@ export class DentureStorageService {
       const docSet = new Set(list.map(r => r.doctor).filter(Boolean));
       const doctorSummary = Array.from(docSet).join(', ') || 'ไม่ระบุ';
 
-      // 3. สรุปผลเบื้องต้นกำกับแต่ละตาราง
+      // สรุปผลเบื้องต้นกำกับแต่ละตาราง
       lines.push(`"================================================================================="`);
       lines.push(`"ตารางสิทธิการรักษา: ${covKey}"`);
-      lines.push(`"สรุปผลเบื้องต้น: จำนวนผู้รับบริการ ${groupCount} ราย | รวมจำนวนเงิน ${groupAmount.toLocaleString('th-TH')} บาท | เฉลี่ย ${Number(groupAvg).toLocaleString('th-TH')} บาท/ราย | ทันตแพทย์: ${doctorSummary}"`);
+      lines.push(
+        `"สรุปผลเบื้องต้น: จำนวนผู้รับบริการ ${groupCount} ราย | รวมจำนวนเงิน ${groupAmount.toLocaleString(
+          'th-TH'
+        )} บาท | เฉลี่ย ${Number(groupAvg).toLocaleString('th-TH')} บาท/ราย | ทันตแพทย์: ${doctorSummary}"`
+      );
       lines.push(`"---------------------------------------------------------------------------------"`);
 
-      // 2. Table Columns requested by user:
+      // Table Columns requested by user:
       // ลำดับ | รหัส | ชื่อ - สกุล | HN | สิทธิการรักษา | ทันตแพทย์ | วัน Insert | จำนวนเงิน (บาท)
       lines.push(`"ลำดับ","รหัส","ชื่อ - สกุล","HN","สิทธิการรักษา","ทันตแพทย์","วัน Insert","จำนวนเงิน (บาท)"`);
 
       list.forEach((r, idx) => {
-        const pName = anonymize ? maskPatientName(r.patientName || '') : (r.patientName || '');
-        const pHn = anonymize ? maskHN(r.hn || '') : (r.hn || '');
+        const pName = anonymize ? maskPatientName(r.patientName || '') : r.patientName || '';
+        const pHn = anonymize ? maskHN(r.hn || '') : r.hn || '';
         const rCode = r.id || `R${String(idx + 1).padStart(3, '0')}`;
-        const amount = (r.treatmentFee || r.labCost || 0);
+        const amount = r.treatmentFee || r.labCost || 0;
 
-        lines.push([
-          idx + 1,
-          `"${rCode}"`,
-          `"${pName.replace(/"/g, '""')}"`,
-          `"${pHn}"`,
-          `"${(r.coverage || covKey).replace(/"/g, '""')}"`,
-          `"${(r.doctor || '').replace(/"/g, '""')}"`,
-          `"${r.date || ''}"`,
-          amount.toFixed(2)
-        ].join(','));
+        lines.push(
+          [
+            idx + 1,
+            `"${rCode}"`,
+            `"${pName.replace(/"/g, '""')}"`,
+            `"${pHn}"`,
+            `"${(r.coverage || covKey).replace(/"/g, '""')}"`,
+            `"${(r.doctor || '').replace(/"/g, '""')}"`,
+            `"${r.date || ''}"`,
+            amount.toFixed(2),
+          ].join(',')
+        );
       });
 
       // รวมจำนวนเงินแถวสุดท้ายพร้อมใส่ คำอ่าน
-      lines.push([
-        '""',
-        '""',
-        '""',
-        '""',
-        '""',
-        `"รวมจำนวนเงิน ${covKey}"`,
-        `"รวม ${groupCount} เคส"`,
-        groupAmount.toFixed(2),
-        `"คำอ่าน: ${bahtText}"`
-      ].join(','));
+      lines.push(
+        [
+          '""',
+          '""',
+          '""',
+          '""',
+          '""',
+          `"รวมจำนวนเงิน ${covKey}"`,
+          `"รวม ${groupCount} เคส"`,
+          groupAmount.toFixed(2),
+          `"คำอ่าน: ${bahtText}"`,
+        ].join(',')
+      );
 
       lines.push('');
     });
@@ -434,9 +632,10 @@ export class DentureStorageService {
     const a = document.createElement('a');
     a.href = url;
     const prefix = anonymize ? 'รายงานฟันปลอม_แยกตามสิทธิ_PDPA' : 'รายงานฟันปลอม_แยกตามสิทธิ_รพ';
-    const dateSuffix = filterOpts.startDate && filterOpts.endDate 
-      ? `${filterOpts.startDate}_ถึง_${filterOpts.endDate}`
-      : filterOpts.year && filterOpts.year !== 'all'
+    const dateSuffix =
+      filterOpts.startDate && filterOpts.endDate
+        ? `${filterOpts.startDate}_ถึง_${filterOpts.endDate}`
+        : filterOpts.year && filterOpts.year !== 'all'
         ? `ปี_${filterOpts.year}`
         : new Date().toISOString().split('T')[0];
     a.download = `${prefix}_${dateSuffix}.csv`;
