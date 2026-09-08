@@ -31,12 +31,12 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build Web Application
         env:
           VITE_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: npm run build
+        run: npx vite build
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v4
