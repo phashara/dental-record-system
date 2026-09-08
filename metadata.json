@@ -1,0 +1,10 @@
+{
+  "name": "ระบบทะเบียนฟันปลอม",
+  "description": "ระบบทะเบียนและประวัติการรักษาฟันปลอม สแกน OPD Card / ทะเบียนด้วย AI OCR และแดชบอร์ดเรียลไทม์",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

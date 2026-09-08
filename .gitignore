@@ -1,0 +1,26 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+
+# Sensitive environment variables & API keys
+.env
+.env*
+!.env.example
+*.pem
+*.key
+credentials*.json
+
+# Patient database & hospital confidential data
+data/*.private.json
+data/*.local.json
+data/records_real.json
+data/hospital_*.json
+uploads/
+scans/
+temp/
+*.tmp
+*.sqlite
+*.db
