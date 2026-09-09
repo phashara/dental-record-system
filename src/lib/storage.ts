@@ -1,4 +1,4 @@
-import { DentureRecord, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName } from '../types';
+import { DentureRecord, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName, EXPORT_COVERAGE_ORDER } from '../types';
 import { thaiBahtText } from './bahtText';
 import { db, handleFirestoreError, OperationType } from './firebase';
 import {
@@ -132,11 +132,11 @@ export class DentureStorageService {
 
   // Normalizes coverage and doctor into clean standardized format (removes "ทพญ." etc.)
   private normalizeRecordCoverage(r: DentureRecord): DentureRecord {
-    const res = resolveCoverage(r.coverage);
+    const res = resolveCoverage(r.coverage || r.coverageGroup);
     return {
       ...r,
       doctor: normalizeDoctorName(r.doctor),
-      coverageGroup: r.coverageGroup || res.group,
+      coverageGroup: res.group,
       coverage: res.subItem,
     };
   }
@@ -567,19 +567,39 @@ export class DentureStorageService {
       });
     }
 
-    // Group records by Coverage
-    const grouped: Record<string, DentureRecord[]> = {};
+    // 1. Group records strictly by the 7 categories in EXPORT_COVERAGE_ORDER
+    const grouped: Record<string, DentureRecord[]> = {
+      'UC': [],
+      'ใช้สิทธิจ่ายตรง': [],
+      'พรบ.': [],
+      'ชำระเงินเอง': [],
+      'เบิกต้นสังกัด / รัฐวิสาหกิจ': [],
+      'ประกันสังคม': [],
+      'อื่นๆ': [],
+    };
+
     records.forEach(r => {
-      const covKey = r.coverage || r.coverageGroup || 'สิทธิอื่นๆ';
-      if (!grouped[covKey]) {
-        grouped[covKey] = [];
-      }
-      grouped[covKey].push(r);
+      const resolved = resolveCoverage(r.coverage || r.coverageGroup);
+      const groupKey = (EXPORT_COVERAGE_ORDER as readonly string[]).includes(resolved.group)
+        ? resolved.group
+        : 'อื่นๆ';
+      grouped[groupKey].push({
+        ...r,
+        coverageGroup: groupKey,
+        coverage: resolved.subItem,
+      });
     });
 
     const lines: string[] = [];
     let grandTotalAmount = 0;
     let grandTotalCount = 0;
+
+    // Calculate totals across all categories
+    EXPORT_COVERAGE_ORDER.forEach(catName => {
+      const list = grouped[catName] || [];
+      grandTotalCount += list.length;
+      grandTotalAmount += list.reduce((sum, r) => sum + (r.treatmentFee || r.labCost || 0), 0);
+    });
 
     // Report Header
     const periodText = filterOpts.periodLabel
@@ -590,63 +610,108 @@ export class DentureStorageService {
       ? `ประจำปี พ.ศ. ${filterOpts.year}`
       : 'ข้อมูลทั้งหมด (All Records)';
 
-    lines.push(`"รายงานทะเบียนผู้ป่วยฟันปลอม จำแนกแยกตามสิทธิการรักษา - โรงพยาบาลพยุหะคีรี"`);
+    lines.push(`"รายงานทะเบียนผู้ป่วยฟันปลอม จำแนกแยกตามสิทธิการรักษา 7 หมวด - โรงพยาบาลพยุหะคีรี"`);
     lines.push(`"ช่วงเวลาข้อมูลที่เลือกส่งออก: ${periodText}"`);
     lines.push(`"วันที่พิมพ์รายงาน: ${new Date().toLocaleDateString('th-TH')} ${new Date().toLocaleTimeString('th-TH')}"`);
     lines.push(`"โหมดรายงาน: ${anonymize ? 'นิรนาม (PDPA De-identified)' : 'ฉบับสมบูรณ์สำหรับโรงพยาบาล'}"`);
     lines.push('');
 
-    // Iterate through each coverage group
-    Object.keys(grouped).sort().forEach(covKey => {
-      const list = grouped[covKey];
+    // Summary Overview Table across all 7 categories
+    lines.push(`"================================================================================="`);
+    lines.push(`"ตารางสรุปภาพรวม: จำแนกผู้ป่วยและยอดค่าใช้จ่าย แยกตาม 7 สิทธิการรักษา"`);
+    lines.push(`"---------------------------------------------------------------------------------"`);
+    lines.push(`"ลำดับ","สิทธิการรักษา (7 หมวด)","จำนวนผู้รับบริการ (ราย)","รวมเป็นเงิน (บาท)","สัดส่วนผู้ป่วย (%)","สัดส่วนยอดเงิน (%)"`);
+
+    EXPORT_COVERAGE_ORDER.forEach((catName, idx) => {
+      const list = grouped[catName] || [];
+      const count = list.length;
+      const amount = list.reduce((sum, r) => sum + (r.treatmentFee || r.labCost || 0), 0);
+      const countPct = grandTotalCount > 0 ? ((count / grandTotalCount) * 100).toFixed(1) + '%' : '0.0%';
+      const amountPct = grandTotalAmount > 0 ? ((amount / grandTotalAmount) * 100).toFixed(1) + '%' : '0.0%';
+      lines.push(
+        [
+          idx + 1,
+          `"${catName}"`,
+          count,
+          amount.toFixed(2),
+          `"${countPct}"`,
+          `"${amountPct}"`,
+        ].join(',')
+      );
+    });
+
+    lines.push(
+      [
+        '""',
+        `"รวมทุกสิทธิการรักษาทั้งสิ้น"`,
+        grandTotalCount,
+        grandTotalAmount.toFixed(2),
+        `"100.0%"`,
+        `"100.0%"`,
+      ].join(',')
+    );
+    lines.push(
+      [
+        '""',
+        `"คำอ่านยอดเงินรวมทั้งสิ้น: ${thaiBahtText(grandTotalAmount)}"`,
+        '""',
+        '""',
+        '""',
+        '""',
+      ].join(',')
+    );
+    lines.push('');
+
+    // Individual Tables for each of the 7 Coverage Groups (in exact order 1 to 7)
+    EXPORT_COVERAGE_ORDER.forEach((catName, idx) => {
+      const list = grouped[catName] || [];
+      const catNumber = idx + 1;
       const groupCount = list.length;
       const groupAmount = list.reduce((sum, r) => sum + (r.treatmentFee || r.labCost || 0), 0);
-      const groupAvg = groupCount > 0 ? (groupAmount / groupCount).toFixed(2) : '0';
+      const groupAvg = groupCount > 0 ? (groupAmount / groupCount).toFixed(2) : '0.00';
       const bahtText = thaiBahtText(groupAmount);
 
-      grandTotalCount += groupCount;
-      grandTotalAmount += groupAmount;
-
-      // Doctor list for this group (clean short name, no "ทพญ.")
+      // Doctor summary (clean short name, no "ทพญ.")
       const docSet = new Set(list.map(r => normalizeDoctorName(r.doctor)).filter(Boolean));
-      const doctorSummary = Array.from(docSet).join(', ') || 'ไม่ระบุ';
+      const doctorSummary = Array.from(docSet).join(', ') || 'ไม่มีรายการ';
 
-      // สรุปผลเบื้องต้นกำกับแต่ละตาราง
       lines.push(`"================================================================================="`);
-      lines.push(`"ตารางสิทธิการรักษา: ${covKey}"`);
+      lines.push(`"ตารางที่ ${catNumber}: สิทธิการรักษา - ${catName}"`);
       lines.push(
         `"สรุปผลเบื้องต้น: จำนวนผู้รับบริการ ${groupCount} ราย | รวมจำนวนเงิน ${groupAmount.toLocaleString(
           'th-TH'
         )} บาท | เฉลี่ย ${Number(groupAvg).toLocaleString('th-TH')} บาท/ราย | ทันตแพทย์: ${doctorSummary}"`
       );
       lines.push(`"---------------------------------------------------------------------------------"`);
+      lines.push(`"ลำดับ","รหัส","ชื่อ - สกุล","HN","สิทธิการรักษาย่อย","ทันตแพทย์","วัน Insert","จำนวนเงิน (บาท)"`);
 
-      // Table Columns requested by user:
-      // ลำดับ | รหัส | ชื่อ - สกุล | HN | สิทธิการรักษา | ทันตแพทย์ | วัน Insert | จำนวนเงิน (บาท)
-      lines.push(`"ลำดับ","รหัส","ชื่อ - สกุล","HN","สิทธิการรักษา","ทันตแพทย์","วัน Insert","จำนวนเงิน (บาท)"`);
+      if (groupCount > 0) {
+        list.forEach((r, itemIdx) => {
+          const pName = anonymize ? maskPatientName(r.patientName || '') : r.patientName || '';
+          const pHn = anonymize ? maskHN(r.hn || '') : r.hn || '';
+          const rCode = r.id || `R${String(itemIdx + 1).padStart(3, '0')}`;
+          const amount = r.treatmentFee || r.labCost || 0;
+          const cleanDoctor = normalizeDoctorName(r.doctor);
+          const subCov = r.coverage || catName;
 
-      list.forEach((r, idx) => {
-        const pName = anonymize ? maskPatientName(r.patientName || '') : r.patientName || '';
-        const pHn = anonymize ? maskHN(r.hn || '') : r.hn || '';
-        const rCode = r.id || `R${String(idx + 1).padStart(3, '0')}`;
-        const amount = r.treatmentFee || r.labCost || 0;
-        const cleanDoctor = normalizeDoctorName(r.doctor);
+          lines.push(
+            [
+              itemIdx + 1,
+              `"${rCode}"`,
+              `"${pName.replace(/"/g, '""')}"`,
+              `"${pHn}"`,
+              `"${subCov.replace(/"/g, '""')}"`,
+              `"${cleanDoctor.replace(/"/g, '""')}"`,
+              `"${r.date || ''}"`,
+              amount.toFixed(2),
+            ].join(',')
+          );
+        });
+      } else {
+        lines.push(`"-","ไม่มีรายการ","(ไม่มีผู้รับบริการในหมวดสิทธิ ${catName} ในช่วงเวลานี้)","-","-","-","-","0.00"`);
+      }
 
-        lines.push(
-          [
-            idx + 1,
-            `"${rCode}"`,
-            `"${pName.replace(/"/g, '""')}"`,
-            `"${pHn}"`,
-            `"${(r.coverage || covKey).replace(/"/g, '""')}"`,
-            `"${cleanDoctor.replace(/"/g, '""')}"`,
-            `"${r.date || ''}"`,
-            amount.toFixed(2),
-          ].join(',')
-        );
-      });
-
-      // รวมจำนวนเงินแถวสุดท้ายพร้อมใส่ คำอ่าน
+      // Summary row for this table
       lines.push(
         [
           '""',
@@ -654,10 +719,10 @@ export class DentureStorageService {
           '""',
           '""',
           '""',
-          `"รวมจำนวนเงิน ${covKey}"`,
+          `"รวมจำนวนเงิน ตารางที่ ${catNumber} (${catName})"`,
           `"รวม ${groupCount} เคส"`,
           groupAmount.toFixed(2),
-          `"คำอ่าน: ${bahtText}"`,
+          `"คำอ่าน: ${groupCount > 0 ? bahtText : 'ศูนย์บาทถ้วน'}"`,
         ].join(',')
       );
 
@@ -666,7 +731,7 @@ export class DentureStorageService {
 
     // Grand Total Section
     lines.push(`"================================================================================="`);
-    lines.push(`"สรุปผลรวมทุกสิทธิการรักษา"`);
+    lines.push(`"สรุปยอดรวมสุทธิทุกสิทธิการรักษา (Grand Total 7 สิทธิการรักษา)"`);
     lines.push(`"จำนวนผู้รับบริการทั้งหมด: ${grandTotalCount} ราย"`);
     lines.push(`"รวมจำนวนเงินทั้งสิ้น: ${grandTotalAmount.toLocaleString('th-TH')} บาท"`);
     lines.push(`"คำอ่านจำนวนเงินรวมทั้งสิ้น: ${thaiBahtText(grandTotalAmount)}"`);

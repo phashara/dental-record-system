@@ -74,7 +74,7 @@ function normalizeCoverage(raw: string | undefined): { group: string; subItem: s
 
   // 2. ใช้สิทธิจ่ายตรง
   if (clean.includes('กทม') || clean.includes('อปท')) return { group: 'ใช้สิทธิจ่ายตรง', subItem: 'เบิกจ่ายตรง กทม./อปท.' };
-  if (clean.includes('จ่ายตรง') || clean.includes('ต้นสังกัด (ระบบจ่ายตรง)')) return { group: 'ใช้สิทธิจ่ายตรง', subItem: 'ต้นสังกัด (ระบบจ่ายตรง)' };
+  if (clean.includes('จ่ายตรง') || clean.includes('ต้นสังกัด (ระบบจ่ายตรง)') || clean.includes('ข้าราชการ') || clean.includes('เบิกตรง')) return { group: 'ใช้สิทธิจ่ายตรง', subItem: 'ต้นสังกัด (ระบบจ่ายตรง)' };
 
   // 3. พรบ.
   if (clean.includes('พรบ') || clean.includes('พ.ร.บ')) return { group: 'พรบ.', subItem: 'พรบ.' };

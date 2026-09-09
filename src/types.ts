@@ -242,6 +242,16 @@ export const COVERAGE_CATEGORIES: CoverageCategoryGroup[] = [
   },
 ];
 
+export const EXPORT_COVERAGE_ORDER = [
+  'UC',
+  'ใช้สิทธิจ่ายตรง',
+  'พรบ.',
+  'ชำระเงินเอง',
+  'เบิกต้นสังกัด / รัฐวิสาหกิจ',
+  'ประกันสังคม',
+  'อื่นๆ',
+] as const;
+
 // Helper to normalize and categorize any coverage string
 export function resolveCoverage(raw: string | undefined): { group: string; subItem: string; fullDisplay: string } {
   if (!raw) {
@@ -260,7 +270,7 @@ export function resolveCoverage(raw: string | undefined): { group: string; subIt
   }
 
   // Fuzzy matching
-  if (clean.includes('จ่ายตรง') || clean.includes('ต้นสังกัด (ระบบจ่ายตรง)')) {
+  if (clean.includes('จ่ายตรง') || clean.includes('ต้นสังกัด (ระบบจ่ายตรง)') || clean.includes('ข้าราชการ') || clean.includes('เบิกตรง')) {
     const sub = clean.includes('กทม') || clean.includes('อปท') ? 'เบิกจ่ายตรง กทม./อปท.' : 'ต้นสังกัด (ระบบจ่ายตรง)';
     return { group: 'ใช้สิทธิจ่ายตรง', subItem: sub, fullDisplay: `ใช้สิทธิจ่ายตรง • ${sub}` };
   }
