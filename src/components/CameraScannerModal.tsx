@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, X, Check, RefreshCw, AlertCircle, FileText, Sparkles, SwitchCamera, Image as ImageIcon } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage } from '../types';
+import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, normalizeDoctorName } from '../types';
 
 interface CameraScannerModalProps {
   isOpen: boolean;
@@ -390,7 +390,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
           age: r.age ? String(r.age) : '',
           gender: r.gender || 'ไม่ระบุ',
           date: r.date || new Date().toISOString().split('T')[0],
-          doctor: r.doctor || 'ชิดชนก',
+          doctor: normalizeDoctorName(r.doctor),
           dentureType: r.dentureType || 'CD (ฟันเทียมทั้งปาก)',
           denturePosition: r.denturePosition || 'บนและล่าง',
           coverage: r.coverage || 'UC 30 บาท',
@@ -431,6 +431,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
       const cov = resolveCoverage(r.coverage);
       return {
         ...r,
+        doctor: normalizeDoctorName(r.doctor),
         coverageGroup: r.coverageGroup || cov.group,
         coverage: cov.subItem,
       };
@@ -763,8 +764,8 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                         ทันตแพทย์ผู้รักษา (5 ท่าน)
                       </label>
                       <select
-                        value={rec.doctor}
-                        onChange={e => handleUpdateRecordField(idx, 'doctor', e.target.value)}
+                        value={normalizeDoctorName(rec.doctor)}
+                        onChange={e => handleUpdateRecordField(idx, 'doctor', normalizeDoctorName(e.target.value))}
                         className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-blue-700 dark:text-blue-300"
                       >
                         {DOCTORS_LIST.map(doc => (

@@ -1,6 +1,6 @@
 import React from 'react';
 import { DollarSign, TrendingUp, Download, PieChart, FileCheck, Layers, Calendar, Shield } from 'lucide-react';
-import { DentureRecord, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN } from '../types';
+import { DentureRecord, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName } from '../types';
 
 interface LabCostSummaryViewProps {
   records: DentureRecord[];
@@ -213,7 +213,7 @@ export const LabCostSummaryView: React.FC<LabCostSummaryViewProps> = ({
                   )}
                 </span>
                 <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">
-                  หมอ{r.doctor}
+                  {normalizeDoctorName(r.doctor)}
                 </span>
               </div>
 

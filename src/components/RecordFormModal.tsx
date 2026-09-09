@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, FileText, Sparkles, Layers } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, classifyDentureType } from '../types';
+import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, classifyDentureType, normalizeDoctorName } from '../types';
 
 interface RecordFormModalProps {
   isOpen: boolean;
@@ -35,7 +35,10 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
 
   useEffect(() => {
     if (editingRecord) {
-      setFormData(editingRecord);
+      setFormData({
+        ...editingRecord,
+        doctor: normalizeDoctorName(editingRecord.doctor),
+      });
     } else {
       setFormData({
         hn: '',
@@ -73,7 +76,7 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
       age: formData.age || '',
       gender: formData.gender as any || 'หญิง',
       date: formData.date || new Date().toISOString().split('T')[0],
-      doctor: formData.doctor || 'ชิดชนก',
+      doctor: normalizeDoctorName(formData.doctor),
       dentureType: formData.dentureType || 'CD',
       denturePosition: formData.denturePosition || 'บนและล่าง',
       coverageGroup: resolvedCoverage.group,
@@ -181,8 +184,8 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
                 ทันตแพทย์ผู้รักษา (5 ท่าน) *
               </label>
               <select
-                value={formData.doctor}
-                onChange={e => setFormData({ ...formData, doctor: e.target.value })}
+                value={normalizeDoctorName(formData.doctor)}
+                onChange={e => setFormData({ ...formData, doctor: normalizeDoctorName(e.target.value) })}
                 className="w-full px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-none text-blue-700 dark:text-blue-300 font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 {DOCTORS_LIST.map(doc => (

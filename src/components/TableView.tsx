@@ -18,7 +18,7 @@ import {
   Square,
   X
 } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN } from '../types';
+import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName } from '../types';
 import { CoverageSliderFilter } from './CoverageSliderFilter';
 import { thaiBahtText } from '../lib/bahtText';
 
@@ -96,7 +96,9 @@ export const TableView: React.FC<TableViewProps> = ({
 
         // Doctor filter
         const matchesDoctor =
-          doctorFilter === 'all' || r.doctor?.includes(doctorFilter);
+          doctorFilter === 'all' ||
+          normalizeDoctorName(r.doctor) === doctorFilter ||
+          r.doctor?.includes(doctorFilter);
 
         // Denture type filter
         const matchesType =
@@ -400,7 +402,7 @@ export const TableView: React.FC<TableViewProps> = ({
 
                     <td className="py-3 px-4">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40">
-                        {r.doctor}
+                        {normalizeDoctorName(r.doctor)}
                       </span>
                     </td>
 
@@ -559,7 +561,7 @@ export const TableView: React.FC<TableViewProps> = ({
                 </div>
 
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300">
-                  หมอ{r.doctor}
+                  {normalizeDoctorName(r.doctor)}
                 </span>
               </div>
 

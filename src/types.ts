@@ -19,6 +19,31 @@ export const DOCTORS_LIST = [
   { name: 'จิณณพัต', fullName: 'ทพญ.จิณณพัต อินทร์ยัง', color: 'bg-indigo-500' },
 ] as const;
 
+/**
+ * Normalizes doctor name to clean short format (ตัดคำว่า ทพญ., ทพ., หมอ ออกทั้งหมด)
+ * เช่น "ทพญ.กนกวรรณ", "ทพญ.กนกวรรณ พัฒนกิจจารักษ์", "หมอกนกวรรณ" -> "กนกวรรณ"
+ */
+export function normalizeDoctorName(raw: string | undefined | null): string {
+  if (!raw) return 'กนกวรรณ';
+  const clean = raw.trim();
+
+  // Match our 5 primary dentists
+  if (clean.includes('กนกวรรณ')) return 'กนกวรรณ';
+  if (clean.includes('ศศิมนต์')) return 'ศศิมนต์';
+  if (clean.includes('ชิดชนก')) return 'ชิดชนก';
+  if (clean.includes('วีรยา') || clean.includes('วรียา')) return 'วีรยา';
+  if (clean.includes('จิณณพัต')) return 'จิณณพัต';
+
+  // Historical archive dentists
+  if (clean.includes('สุนิษา')) return 'สุนิษา';
+  if (clean.includes('บุณยาพร')) return 'บุณยาพร';
+
+  // Strip prefixes like ทพญ., ทพ., ทญ., หมอ, etc.
+  return clean
+    .replace(/^(ทพญ\.|ทพ\.|ทญ\.|หมอ|ทันตแพทย์หญิง|ทันตแพทย์)\s*/g, '')
+    .trim();
+}
+
 // ---------------- DENTURE TYPE CLASSIFICATION & KNOWLEDGE BASE ----------------
 export interface DentureCategoryRule {
   category: 'CD' | 'APD' | 'COMBINED' | 'TP' | 'RPD' | 'REPAIR' | 'OTHER';

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Printer, Calendar, User, FileText, DollarSign, Activity, Stethoscope, CheckCircle2, Shield, Trash2, AlertTriangle } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN } from '../types';
+import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName } from '../types';
 
 interface RecordDetailModalProps {
   record: DentureRecord | null;
@@ -20,9 +20,10 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   if (!record) return null;
 
-  const doctorInfo = DOCTORS_LIST.find(d => record.doctor?.includes(d.name)) || {
-    name: record.doctor,
-    fullName: `ทญ.${record.doctor}`,
+  const cleanDoctorName = normalizeDoctorName(record.doctor);
+  const doctorInfo = DOCTORS_LIST.find(d => cleanDoctorName === d.name || record.doctor?.includes(d.name)) || {
+    name: cleanDoctorName,
+    fullName: `ทพญ.${cleanDoctorName}`,
     color: 'bg-blue-600',
   };
 

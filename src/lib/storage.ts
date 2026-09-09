@@ -1,4 +1,4 @@
-import { DentureRecord, resolveCoverage, maskPatientName, maskHN } from '../types';
+import { DentureRecord, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName } from '../types';
 import { thaiBahtText } from './bahtText';
 import { db, handleFirestoreError, OperationType } from './firebase';
 import {
@@ -130,11 +130,12 @@ export class DentureStorageService {
     return this.isOnlineStatus;
   }
 
-  // Normalizes coverage into the 5 specified categories & sub-items
+  // Normalizes coverage and doctor into clean standardized format (removes "ทพญ." etc.)
   private normalizeRecordCoverage(r: DentureRecord): DentureRecord {
     const res = resolveCoverage(r.coverage);
     return {
       ...r,
+      doctor: normalizeDoctorName(r.doctor),
       coverageGroup: r.coverageGroup || res.group,
       coverage: res.subItem,
     };
@@ -606,8 +607,8 @@ export class DentureStorageService {
       grandTotalCount += groupCount;
       grandTotalAmount += groupAmount;
 
-      // Doctor list for this group
-      const docSet = new Set(list.map(r => r.doctor).filter(Boolean));
+      // Doctor list for this group (clean short name, no "ทพญ.")
+      const docSet = new Set(list.map(r => normalizeDoctorName(r.doctor)).filter(Boolean));
       const doctorSummary = Array.from(docSet).join(', ') || 'ไม่ระบุ';
 
       // สรุปผลเบื้องต้นกำกับแต่ละตาราง
@@ -629,6 +630,7 @@ export class DentureStorageService {
         const pHn = anonymize ? maskHN(r.hn || '') : r.hn || '';
         const rCode = r.id || `R${String(idx + 1).padStart(3, '0')}`;
         const amount = r.treatmentFee || r.labCost || 0;
+        const cleanDoctor = normalizeDoctorName(r.doctor);
 
         lines.push(
           [
@@ -637,7 +639,7 @@ export class DentureStorageService {
             `"${pName.replace(/"/g, '""')}"`,
             `"${pHn}"`,
             `"${(r.coverage || covKey).replace(/"/g, '""')}"`,
-            `"${(r.doctor || '').replace(/"/g, '""')}"`,
+            `"${cleanDoctor.replace(/"/g, '""')}"`,
             `"${r.date || ''}"`,
             amount.toFixed(2),
           ].join(',')

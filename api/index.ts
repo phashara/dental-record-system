@@ -94,6 +94,20 @@ function normalizeCoverage(raw: string | undefined): { group: string; subItem: s
   return { group: 'UC', subItem: clean };
 }
 
+// Normalizes doctor name (ตัดคำว่า ทพญ., ทพ., หมอ ออกทั้งหมด ตามคำขอแบบที่ 1)
+function normalizeDoctor(raw: string | undefined | null): string {
+  if (!raw) return 'กนกวรรณ';
+  const clean = raw.trim();
+  if (clean.includes('กนกวรรณ')) return 'กนกวรรณ';
+  if (clean.includes('ศศิมนต์')) return 'ศศิมนต์';
+  if (clean.includes('ชิดชนก')) return 'ชิดชนก';
+  if (clean.includes('วีรยา') || clean.includes('วรียา')) return 'วีรยา';
+  if (clean.includes('จิณณพัต')) return 'จิณณพัต';
+  if (clean.includes('สุนิษา')) return 'สุนิษา';
+  if (clean.includes('บุณยาพร')) return 'บุณยาพร';
+  return clean.replace(/^(ทพญ\.|ทพ\.|ทญ\.|หมอ|ทันตแพทย์หญิง|ทันตแพทย์)\s*/g, '').trim();
+}
+
 // Helper to get or seed DB
 function getRecords() {
   try {
@@ -105,6 +119,7 @@ function getRecords() {
         const norm = normalizeCoverage(r.coverage);
         return {
           ...r,
+          doctor: normalizeDoctor(r.doctor),
           coverageGroup: r.coverageGroup || norm.group,
           coverage: norm.subItem,
         };
@@ -153,7 +168,7 @@ app.post('/api/records', (req, res) => {
     age: req.body.age || '',
     gender: req.body.gender || 'ไม่ระบุ',
     date: req.body.date || new Date().toISOString().split('T')[0],
-    doctor: req.body.doctor || 'ทพญ.ชิดชนก',
+    doctor: normalizeDoctor(req.body.doctor),
     dentureType: req.body.dentureType || 'CD',
     denturePosition: req.body.denturePosition || 'บนและล่าง',
     coverage: req.body.coverage || 'UC 30 บาท',
@@ -181,6 +196,9 @@ app.post('/api/records/batch', (req, res) => {
     if (!item.id) {
       item.id = `rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     }
+    if (item.doctor) {
+      item.doctor = normalizeDoctor(item.doctor);
+    }
     currentMap.set(item.id, item);
   }
 
@@ -201,9 +219,14 @@ app.put('/api/records/:id', (req, res) => {
     return res.status(404).json({ error: 'Record not found' });
   }
 
+  const updatedFields = { ...req.body };
+  if (updatedFields.doctor) {
+    updatedFields.doctor = normalizeDoctor(updatedFields.doctor);
+  }
+
   records[index] = {
     ...records[index],
-    ...req.body,
+    ...updatedFields,
     updatedAt: new Date().toISOString(),
   };
 
@@ -263,6 +286,7 @@ app.post('/api/records/restore-archive', (req, res) => {
         const norm = normalizeCoverage(r.coverage);
         return {
           ...r,
+          doctor: normalizeDoctor(r.doctor),
           coverageGroup: r.coverageGroup || norm.group,
           coverage: r.coverage || norm.subItem,
         };
@@ -358,12 +382,19 @@ app.post('/api/ocr', async (req, res) => {
     });
 
     const responseText = response.text || '{}';
-    let parsedJson = {};
+    let parsedJson: any = {};
     try {
       parsedJson = JSON.parse(responseText);
     } catch (parseErr) {
       const cleaned = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       parsedJson = JSON.parse(cleaned);
+    }
+
+    if (parsedJson && Array.isArray(parsedJson.records)) {
+      parsedJson.records = parsedJson.records.map((rec: any) => ({
+        ...rec,
+        doctor: normalizeDoctor(rec.doctor),
+      }));
     }
 
     res.json({

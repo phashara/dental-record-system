@@ -13,7 +13,7 @@ import {
   Filter,
   RotateCcw
 } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN } from '../types';
+import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName } from '../types';
 
 interface DashboardViewProps {
   records: DentureRecord[];
@@ -84,7 +84,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   // Doctor breakdown (5 doctors specified)
   const doctorStats = DOCTORS_LIST.map(doc => {
-    const docRecords = filteredRecords.filter(r => r.doctor?.includes(doc.name));
+    const docRecords = filteredRecords.filter(r => normalizeDoctorName(r.doctor) === doc.name || r.doctor?.includes(doc.name));
     const count = docRecords.length;
     const labSum = docRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
     const feeSum = docRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
@@ -594,7 +594,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             >
               <div className="flex items-center space-x-3">
                 <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs font-bold">
-                  {r.doctor?.charAt(0) || 'ฟ'}
+                  {normalizeDoctorName(r.doctor)?.charAt(0) || 'ฟ'}
                 </div>
                 <div>
                   <div className="flex items-center space-x-2">
@@ -611,7 +611,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </span>
                   </div>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    {r.dentureType} • ทันตแพทย์: {r.doctor} • {r.date}
+                    {r.dentureType} • ทันตแพทย์: {normalizeDoctorName(r.doctor)} • {r.date}
                   </p>
                 </div>
               </div>

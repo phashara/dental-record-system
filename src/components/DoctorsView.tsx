@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Stethoscope, DollarSign, Users, Award, ChevronRight, FileText } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, maskPatientName, maskHN } from '../types';
+import { DentureRecord, DOCTORS_LIST, maskPatientName, maskHN, normalizeDoctorName } from '../types';
 
 interface DoctorsViewProps {
   records: DentureRecord[];
@@ -19,7 +19,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
 
   // Compute stats for all 5 doctors
   const doctorsData = DOCTORS_LIST.map(doc => {
-    const docRecords = records.filter(r => r.doctor?.includes(doc.name));
+    const docRecords = records.filter(r => normalizeDoctorName(r.doctor) === doc.name || r.doctor?.includes(doc.name));
     const totalCases = docRecords.length;
     const totalLab = docRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
     const totalFee = docRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
