@@ -330,6 +330,7 @@ app.post('/api/ocr', async (req, res) => {
   "confidenceScore": 0.95,
   "records": [
     {
+      "pageNumber": 1,
       "hn": "เลข HN เช่น 580012345 หรือตัวเลข 6-10 หลักที่พบ",
       "patientName": "ชื่อและนามสกุลเต็ม เช่น นายสมชาย ใจดี หรือ นางสมพร มีสุข",
       "age": "อายุ เช่น 64",
@@ -360,7 +361,7 @@ app.post('/api/ocr', async (req, res) => {
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
+      model: 'gemini-3.8-flash',
       contents: [
         {
           role: 'user',

@@ -10,6 +10,7 @@ import { RecordFormModal } from './components/RecordFormModal';
 import { GitHubAndPrivacyModal } from './components/GitHubAndPrivacyModal';
 import { IPhoneLockScreen } from './components/IPhoneLockScreen';
 import { DataManagementModal } from './components/DataManagementModal';
+import { PdfBatchUploadModal } from './components/PdfBatchUploadModal';
 import { DentureRecord, ViewTab } from './types';
 import { dentureStorage } from './lib/storage';
 import {
@@ -81,6 +82,7 @@ export default function App() {
 
   // Modals state
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [selectedRecordForDetail, setSelectedRecordForDetail] = useState<DentureRecord | null>(null);
   const [editingRecord, setEditingRecord] = useState<DentureRecord | null>(null);
@@ -206,6 +208,7 @@ export default function App() {
         currentTab={currentTab}
         onTabChange={setCurrentTab}
         onOpenScanner={() => setIsScannerOpen(true)}
+        onOpenPdfUpload={() => setIsPdfModalOpen(true)}
         onOpenAddModal={() => {
           setEditingRecord(null);
           setIsAddModalOpen(true);
@@ -232,6 +235,7 @@ export default function App() {
             onSelectDoctorFilter={handleSelectDoctorFilter}
             onViewRecord={r => setSelectedRecordForDetail(r)}
             onOpenScanner={() => setIsScannerOpen(true)}
+            onOpenPdfUpload={() => setIsPdfModalOpen(true)}
             isPdpaMode={isPdpaMode}
           />
         )}
@@ -334,6 +338,21 @@ export default function App() {
       </div>
 
       {/* Modals */}
+      <PdfBatchUploadModal
+        isOpen={isPdfModalOpen}
+        onClose={() => setIsPdfModalOpen(false)}
+        onSaveRecord={async (record) => {
+          await dentureStorage.saveRecord(record as DentureRecord);
+        }}
+        onBatchSaved={(savedCount) => {
+          const up = dentureStorage.getLocalRecords();
+          setRecords(up);
+          showToast(`✓ บันทึกข้อมูลผู้ป่วย ${savedCount} รายจาก PDF เข้าสู่ระบบเรียบร้อยแล้ว`);
+          dentureStorage.syncQueueWithFirestore().catch(() => {});
+          setCurrentTab('records');
+        }}
+      />
+
       <CameraScannerModal
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}

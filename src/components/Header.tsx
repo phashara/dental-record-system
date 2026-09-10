@@ -1,11 +1,12 @@
 import React from 'react';
-import { Camera, Plus, Moon, Sun, Download, RefreshCw, Wifi, WifiOff, Stethoscope, ShieldCheck, Github, EyeOff, Eye, Database, Lock } from 'lucide-react';
+import { Camera, Plus, Moon, Sun, Download, RefreshCw, Wifi, WifiOff, Stethoscope, ShieldCheck, Github, EyeOff, Eye, Database, Lock, FileText } from 'lucide-react';
 import { ViewTab } from '../types';
 
 interface HeaderProps {
   currentTab: ViewTab;
   onTabChange: (tab: ViewTab) => void;
   onOpenScanner: () => void;
+  onOpenPdfUpload: () => void;
   onOpenAddModal: () => void;
   isDark: boolean;
   onToggleDark: () => void;
@@ -25,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   currentTab,
   onTabChange,
   onOpenScanner,
+  onOpenPdfUpload,
   onOpenAddModal,
   isDark,
   onToggleDark,
@@ -205,6 +207,17 @@ export const Header: React.FC<HeaderProps> = ({
               aria-label="เปลี่ยนโหมดสี"
             >
               {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-zinc-600" />}
+            </button>
+
+            {/* Batch PDF Upload Button */}
+            <button
+              onClick={onOpenPdfUpload}
+              className="flex items-center space-x-1.5 px-3 sm:px-3.5 py-2 rounded-2xl text-xs sm:text-sm font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 active:scale-95 shadow-xs transition-all duration-150"
+              title="อัปโหลดไฟล์ PDF เวชระเบียนหลายหน้า AI สกัดข้อมูลคนไข้ทุกหน้า"
+            >
+              <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span className="hidden sm:inline">อัปโหลด PDF</span>
+              <span className="sm:hidden">PDF</span>
             </button>
 
             {/* Primary iOS action: Scan Camera */}

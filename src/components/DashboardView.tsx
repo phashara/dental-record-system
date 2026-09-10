@@ -11,7 +11,8 @@ import {
   Sparkles, 
   ArrowRight,
   Filter,
-  RotateCcw
+  RotateCcw,
+  FileText
 } from 'lucide-react';
 import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName } from '../types';
 
@@ -20,6 +21,7 @@ interface DashboardViewProps {
   onSelectDoctorFilter: (docName: string) => void;
   onViewRecord: (record: DentureRecord) => void;
   onOpenScanner: () => void;
+  onOpenPdfUpload?: () => void;
   isPdpaMode?: boolean;
 }
 
@@ -28,6 +30,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onSelectDoctorFilter,
   onViewRecord,
   onOpenScanner,
+  onOpenPdfUpload,
   isPdpaMode = false,
 }) => {
   // Date / Time Range Filter States
@@ -154,13 +157,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           </div>
 
-          <button
-            onClick={onOpenScanner}
-            className="shrink-0 flex items-center space-x-2 px-5 py-3 rounded-2xl bg-white text-blue-700 hover:bg-blue-50 active:scale-95 text-xs sm:text-sm font-bold shadow-md transition-all duration-150"
-          >
-            <Activity className="w-4 h-4 text-blue-600" />
-            <span>เปิดกล้องสแกน OPD Card</span>
-          </button>
+          <div className="shrink-0 flex flex-wrap items-center gap-2.5">
+            {onOpenPdfUpload && (
+              <button
+                onClick={onOpenPdfUpload}
+                className="flex items-center space-x-2 px-4 sm:px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-zinc-950 active:scale-95 text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all duration-150"
+                title="อัปโหลดไฟล์ PDF สแกนหลายหน้า AI สกัดข้อมูลทุกหน้า"
+              >
+                <FileText className="w-4 h-4 text-zinc-950" />
+                <span>อัปโหลด PDF (หลายหน้า)</span>
+              </button>
+            )}
+
+            <button
+              onClick={onOpenScanner}
+              className="flex items-center space-x-2 px-4 sm:px-5 py-3 rounded-2xl bg-white text-blue-700 hover:bg-blue-50 active:scale-95 text-xs sm:text-sm font-bold shadow-md transition-all duration-150"
+            >
+              <Activity className="w-4 h-4 text-blue-600" />
+              <span>เปิดกล้องสแกน OPD Card</span>
+            </button>
+          </div>
         </div>
 
         {/* Decorative subtle ambient circles */}
