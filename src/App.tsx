@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { TableView } from './components/TableView';
@@ -10,7 +10,6 @@ import { RecordFormModal } from './components/RecordFormModal';
 import { GitHubAndPrivacyModal } from './components/GitHubAndPrivacyModal';
 import { IPhoneLockScreen } from './components/IPhoneLockScreen';
 import { DataManagementModal } from './components/DataManagementModal';
-import { PdfBatchUploadModal } from './components/PdfBatchUploadModal';
 import { DentureRecord, ViewTab } from './types';
 import { dentureStorage } from './lib/storage';
 import {
@@ -23,24 +22,62 @@ import {
   FileText,
 } from 'lucide-react';
 
+// Lazy load PdfBatchUploadModal so PDF.js is only fetched on-demand
+const PdfBatchUploadModal = lazy(() =>
+  import('./components/PdfBatchUploadModal').then(m => ({ default: m.PdfBatchUploadModal }))
+);
+
+function safeGetStorage(storage: 'local' | 'session', key: string): string | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    return storage === 'local' ? localStorage.getItem(key) : sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetStorage(storage: 'local' | 'session', key: string, value: string): void {
+  try {
+    if (typeof window === 'undefined') return;
+    if (storage === 'local') {
+      localStorage.setItem(key, value);
+    } else {
+      sessionStorage.setItem(key, value);
+    }
+  } catch {}
+}
+
+function safeRemoveStorage(storage: 'local' | 'session', key: string): void {
+  try {
+    if (typeof window === 'undefined') return;
+    if (storage === 'local') {
+      localStorage.removeItem(key);
+    } else {
+      sessionStorage.removeItem(key);
+    }
+  } catch {}
+}
+
 export default function App() {
   const [records, setRecords] = useState<DentureRecord[]>([]);
   const [currentTab, setCurrentTab] = useState<ViewTab>('dashboard');
   const [isDark, setIsDark] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('denture_theme');
+    try {
+      const saved = safeGetStorage('local', 'denture_theme');
       if (saved) return saved === 'dark';
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+    } catch {
+      return false;
     }
-    return false;
   });
 
   // iPhone Style Passcode Lock (PIN 0723)
   const [isLocked, setIsLocked] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('denture_unlocked_0723') !== 'true';
+    try {
+      return safeGetStorage('session', 'denture_unlocked_0723') !== 'true';
+    } catch {
+      return false;
     }
-    return true;
   });
 
   // Data Management Modal State
@@ -48,11 +85,12 @@ export default function App() {
 
   // PDPA Privacy Mode State
   const [isPdpaMode, setIsPdpaMode] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('denture_pdpa_mode');
+    try {
+      const saved = safeGetStorage('local', 'denture_pdpa_mode');
       return saved === 'true';
+    } catch {
+      return false;
     }
-    return false;
   });
 
   const [isGitHubModalOpen, setIsGitHubModalOpen] = useState<boolean>(false);
@@ -61,20 +99,20 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const handleUnlock = () => {
-    sessionStorage.setItem('denture_unlocked_0723', 'true');
+    safeSetStorage('session', 'denture_unlocked_0723', 'true');
     setIsLocked(false);
     showToast('🔓 ปลดล็อคระบบสำเร็จ ยินดีต้อนรับสู่ระบบทะเบียนฟันปลอม');
   };
 
   const handleLock = () => {
-    sessionStorage.removeItem('denture_unlocked_0723');
+    safeRemoveStorage('session', 'denture_unlocked_0723');
     setIsLocked(true);
   };
 
   const handleTogglePdpaMode = () => {
     setIsPdpaMode(prev => {
       const next = !prev;
-      localStorage.setItem('denture_pdpa_mode', String(next));
+      safeSetStorage('local', 'denture_pdpa_mode', String(next));
       showToast(next ? '🛡️ เปิดโหมดคุ้มครองข้อมูล PDPA (ซ่อนชื่อและ HN)' : '👁️ ปิดโหมด PDPA (แสดงชื่อเต็ม)');
       return next;
     });
@@ -338,20 +376,24 @@ export default function App() {
       </div>
 
       {/* Modals */}
-      <PdfBatchUploadModal
-        isOpen={isPdfModalOpen}
-        onClose={() => setIsPdfModalOpen(false)}
-        onSaveRecord={async (record) => {
-          await dentureStorage.saveRecord(record as DentureRecord);
-        }}
-        onBatchSaved={(savedCount) => {
-          const up = dentureStorage.getLocalRecords();
-          setRecords(up);
-          showToast(`✓ บันทึกข้อมูลผู้ป่วย ${savedCount} รายจาก PDF เข้าสู่ระบบเรียบร้อยแล้ว`);
-          dentureStorage.syncQueueWithFirestore().catch(() => {});
-          setCurrentTab('records');
-        }}
-      />
+      <Suspense fallback={null}>
+        {isPdfModalOpen && (
+          <PdfBatchUploadModal
+            isOpen={isPdfModalOpen}
+            onClose={() => setIsPdfModalOpen(false)}
+            onSaveRecord={async (record) => {
+              await dentureStorage.saveRecord(record as DentureRecord);
+            }}
+            onBatchSaved={(savedCount) => {
+              const up = dentureStorage.getLocalRecords();
+              setRecords(up);
+              showToast(`✓ บันทึกข้อมูลผู้ป่วย ${savedCount} รายจาก PDF เข้าสู่ระบบเรียบร้อยแล้ว`);
+              dentureStorage.syncQueueWithFirestore().catch(() => {});
+              setCurrentTab('records');
+            }}
+          />
+        )}
+      </Suspense>
 
       <CameraScannerModal
         isOpen={isScannerOpen}

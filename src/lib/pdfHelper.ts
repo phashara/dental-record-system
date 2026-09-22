@@ -1,15 +1,3 @@
-import * as pdfjsLib from 'pdfjs-dist';
-
-// Configure worker using CDN or bundled worker URL
-try {
-  if (typeof window !== 'undefined') {
-    // Use unpkg or cdnjs corresponding to the installed version
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-  }
-} catch (e) {
-  console.warn('PDF.js worker setup warning:', e);
-}
-
 export interface RenderedPdfPage {
   pageNumber: number;
   dataUrl: string; // JPEG base64 data URL
@@ -22,6 +10,47 @@ export interface PdfProcessingProgress {
   totalPages: number;
   stage: 'reading' | 'rendering' | 'ocr' | 'completed' | 'error';
   message: string;
+}
+
+let cachedPdfjsLib: any = null;
+
+/**
+ * Lazy loads pdfjs-dist safely on demand
+ */
+async function getPdfjsLib(): Promise<any> {
+  if (cachedPdfjsLib) return cachedPdfjsLib;
+
+  // Polyfill Promise.withResolvers if not present in the browser
+  if (typeof (Promise as any).withResolvers === 'undefined') {
+    (Promise as any).withResolvers = function <T>() {
+      let resolve!: (value: T | PromiseLike<T>) => void;
+      let reject!: (reason?: any) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+  }
+
+  try {
+    // Prefer legacy build for broad browser compatibility
+    cachedPdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  } catch (err) {
+    console.warn('Fallback to standard pdfjs-dist import:', err);
+    cachedPdfjsLib = await import('pdfjs-dist');
+  }
+
+  try {
+    if (typeof window !== 'undefined' && cachedPdfjsLib?.GlobalWorkerOptions) {
+      const v = cachedPdfjsLib.version || '6.3.289';
+      cachedPdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${v}/legacy/build/pdf.worker.min.mjs`;
+    }
+  } catch (e) {
+    console.warn('PDF.js worker setup warning:', e);
+  }
+
+  return cachedPdfjsLib;
 }
 
 /**
@@ -41,9 +70,11 @@ export async function renderPdfToPageImages(
     message: `กำลังเปิดไฟล์ PDF: ${file.name}...`,
   });
 
+  const pdfjsLib = await getPdfjsLib();
+
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(arrayBuffer),
-    cMapUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+    cMapUrl: `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version || '6.3.289'}/cmaps/`,
     cMapPacked: true,
   });
 
@@ -60,14 +91,14 @@ export async function renderPdfToPageImages(
     });
 
     const page = await pdfDoc.getPage(pageNum);
-    
+
     // Scale 1.75 delivers crisp handwriting readability for Gemini OCR without excessive memory
     const viewport = page.getViewport({ scale: 1.75 });
-    
+
     const canvas = document.createElement('canvas');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-    
+
     const context = canvas.getContext('2d', { willReadFrequently: true });
     if (!context) {
       throw new Error(`Cannot get 2d context for page ${pageNum}`);
