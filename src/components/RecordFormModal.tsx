@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, FileText, Sparkles, Layers } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, classifyDentureType, normalizeDoctorName } from '../types';
+import { DentureRecord, DOCTORS_LIST, ACTIVE_DOCTORS, FORMER_DOCTORS, COVERAGE_CATEGORIES, resolveCoverage, classifyDentureType, normalizeDoctorName } from '../types';
 
 interface RecordFormModalProps {
   isOpen: boolean;
@@ -188,15 +188,22 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
                 onChange={e => setFormData({ ...formData, doctor: e.target.value })}
                 className="w-full px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-none text-blue-700 dark:text-blue-300 font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
-                <optgroup label="ทันตแพทย์ปัจจุบัน (5 ท่าน)">
-                  {DOCTORS_LIST.map(doc => (
+                <optgroup label="ทันตแพทย์ปฏิบัติงานปัจจุบัน (5 ท่าน)">
+                  {ACTIVE_DOCTORS.map(doc => (
                     <option key={doc.name} value={doc.name}>
                       {doc.fullName} ({doc.name})
                     </option>
                   ))}
                 </optgroup>
+                <optgroup label="ทันตแพทย์ในอดีต (3 ท่าน - ข้อมูลย้อนหลัง)">
+                  {FORMER_DOCTORS.map(doc => (
+                    <option key={doc.name} value={doc.name}>
+                      {doc.fullName} ({doc.name}) - [อดีต]
+                    </option>
+                  ))}
+                </optgroup>
                 {formData.doctor && !DOCTORS_LIST.some(d => d.name === normalizeDoctorName(formData.doctor)) && (
-                  <optgroup label="แพทย์ในอดีต / ข้อมูลเดิม">
+                  <optgroup label="แพทย์อื่น ๆ / ข้อมูลเดิม">
                     <option value={formData.doctor}>
                       {formData.doctor} (แพทย์ในอดีต)
                     </option>

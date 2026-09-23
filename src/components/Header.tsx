@@ -21,6 +21,7 @@ import {
   Layers,
   Users,
   DollarSign,
+  TrendingUp,
   ChevronRight,
   Shield,
   Sparkles,
@@ -137,6 +138,18 @@ export const Header: React.FC<HeaderProps> = ({
                 ทะเบียนและประวัติ
               </button>
               <button
+                onClick={() => onTabChange('trends')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all duration-150 ${
+                  currentTab === 'trends'
+                    ? 'bg-white dark:bg-zinc-800 text-blue-600 dark:text-blue-400 shadow-xs font-bold'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+                title="วิเคราะห์แนวโน้ม 4 ปีย้อนหลัง & พยากรณ์ปี 2570"
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>แนวโน้มรายปี</span>
+              </button>
+              <button
                 onClick={() => onTabChange('doctors')}
                 className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
                   currentTab === 'doctors'
@@ -144,7 +157,7 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
                 }`}
               >
-                ทันตแพทย์ (5 ท่าน)
+                ทันตแพทย์ (8 ท่าน)
               </button>
               <button
                 onClick={() => onTabChange('lab')}
@@ -383,6 +396,26 @@ export const Header: React.FC<HeaderProps> = ({
                   </button>
 
                   <button
+                    onClick={() => handleNavClick('trends')}
+                    className={`w-full flex items-center justify-between p-3 rounded-2xl text-left transition-all ${
+                      currentTab === 'trends'
+                        ? 'bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-bold shadow-xs'
+                        : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${currentTab === 'trends' ? 'bg-blue-600 text-white' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'}`}>
+                        <TrendingUp className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-semibold block">📈 วิเคราะห์แนวโน้มรายปี & คาดการณ์</span>
+                        <span className="text-[10px] text-zinc-400">เปรียบเทียบ 4 ปี และพยากรณ์งบแลป 2570</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-zinc-400" />
+                  </button>
+
+                  <button
                     onClick={() => handleNavClick('doctors')}
                     className={`w-full flex items-center justify-between p-3 rounded-2xl text-left transition-all ${
                       currentTab === 'doctors'
@@ -395,8 +428,8 @@ export const Header: React.FC<HeaderProps> = ({
                         <Users className="w-4 h-4" />
                       </div>
                       <div>
-                        <span className="text-xs font-semibold block">ภาระงานทันตแพทย์ (5 ท่าน)</span>
-                        <span className="text-[10px] text-zinc-400">สถิติเคสและผลงานแพทย์</span>
+                        <span className="text-xs font-semibold block">ภาระงานทันตแพทย์ (8 ท่าน)</span>
+                        <span className="text-[10px] text-zinc-400">สถิติเคสและผลงานแพทย์ (ปัจจุบัน & อดีต)</span>
                       </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-zinc-400" />

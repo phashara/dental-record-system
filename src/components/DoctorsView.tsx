@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Stethoscope, DollarSign, Users, Award, ChevronRight, FileText, Calendar } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, maskPatientName, maskHN, normalizeDoctorName, getYearBE } from '../types';
+import { Stethoscope, DollarSign, Users, Award, ChevronRight, FileText, Calendar, Clock } from 'lucide-react';
+import { DentureRecord, DOCTORS_LIST, ACTIVE_DOCTORS, FORMER_DOCTORS, maskPatientName, maskHN, normalizeDoctorName, getYearBE } from '../types';
 
 interface DoctorsViewProps {
   records: DentureRecord[];
@@ -16,7 +16,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
   isPdpaMode = false,
 }) => {
   const [yearFilter, setYearFilter] = useState<'all' | '2566' | '2567' | '2568' | '2569'>('all');
-  const [selectedDoctor, setSelectedDoctor] = useState<string>(DOCTORS_LIST[0]?.name || 'กนกวรรณ');
+  const [selectedDoctor, setSelectedDoctor] = useState<string>(ACTIVE_DOCTORS[0]?.name || 'กนกวรรณ');
 
   // Filter records by selected year
   const filteredRecords = useMemo(() => {
@@ -27,9 +27,9 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
     });
   }, [records, yearFilter]);
 
-  // Compute stats for all 5 current doctors
+  // Compute stats for 5 active doctors
   const doctorsData = useMemo(() => {
-    return DOCTORS_LIST.map(doc => {
+    return ACTIVE_DOCTORS.map(doc => {
       const docRecords = filteredRecords.filter(r => normalizeDoctorName(r.doctor) === doc.name || r.doctor?.includes(doc.name));
       const totalCases = docRecords.length;
       const totalLab = docRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
@@ -45,6 +45,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
       return {
         ...doc,
         isHistorical: false,
+        statusLabel: 'ปัจจุบัน',
         totalCases,
         totalLab,
         totalFee,
@@ -55,20 +56,10 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
     });
   }, [filteredRecords]);
 
-  // Compute stats for historical doctors from legacy records (e.g. 2566 - 2569)
+  // Compute stats for 3 historical doctors (บุณยาพร, สุนิษา, พัชรพรรณ)
   const historicalDoctorsData = useMemo(() => {
-    const activeNames = new Set<string>(DOCTORS_LIST.map(d => d.name));
-    const historyDocNames = new Set<string>();
-    filteredRecords.forEach(r => {
-      const clean = normalizeDoctorName(r.doctor);
-      if (clean && !activeNames.has(clean)) {
-        historyDocNames.add(clean);
-      }
-    });
-
-    const palette = ['bg-indigo-600', 'bg-rose-600', 'bg-teal-700', 'bg-purple-700', 'bg-stone-600'];
-    return Array.from(historyDocNames).sort().map((docName, idx) => {
-      const docRecords = filteredRecords.filter(r => normalizeDoctorName(r.doctor) === docName || r.doctor?.includes(docName));
+    return FORMER_DOCTORS.map(doc => {
+      const docRecords = filteredRecords.filter(r => normalizeDoctorName(r.doctor) === doc.name || r.doctor?.includes(doc.name));
       const totalCases = docRecords.length;
       const totalLab = docRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
       const totalFee = docRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
@@ -79,10 +70,9 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
       });
 
       return {
-        name: docName,
-        fullName: `ทพ./ทพญ. ${docName}`,
-        color: palette[idx % palette.length],
+        ...doc,
         isHistorical: true,
+        statusLabel: 'อดีต',
         totalCases,
         totalLab,
         totalFee,
@@ -110,7 +100,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
           <div>
             <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50 flex items-center space-x-2">
               <Stethoscope className="w-5 h-5 text-blue-600" />
-              <span>ทันตแพทย์คลินิกฟันปลอม ({allDoctors.length} ท่าน)</span>
+              <span>ทันตแพทย์คลินิกฟันปลอม ({allDoctors.length} ท่าน: ปัจจุบัน 5 ท่าน, อดีต 3 ท่าน)</span>
               {yearFilter !== 'all' && (
                 <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-mono font-bold">
                   ประจำปี พ.ศ. {yearFilter}
@@ -118,7 +108,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
               )}
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-              โรงพยาบาลพยุหะคีรี • สรุปภาระงาน หัตถการฟันปลอม และสถิติค่าใช้จ่าย LAB แต่ละท่าน
+              โรงพยาบาลพยุหะคีรี • สรุปภาระงาน หัตถการฟันปลอม และสถิติค่าใช้จ่าย LAB แต่ละท่าน (รวมแพทย์ปัจจุบันและประวัติย้อนหลัง)
             </p>
           </div>
 
@@ -147,8 +137,11 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
         {/* Doctor Selector Pills */}
         <div className="mt-5 space-y-3">
           <div>
-            <span className="text-[11px] font-semibold text-zinc-400">ทันตแพทย์ปัจจุบัน (5 ท่าน)</span>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-1.5">
+            <div className="flex items-center space-x-1.5 mb-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">ทันตแพทย์ปฏิบัติงานปัจจุบัน (5 ท่าน)</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
               {doctorsData.map(doc => (
                 <button
                   key={doc.name}
@@ -177,31 +170,39 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
             </div>
           </div>
 
-          {/* Historical Doctors (if legacy imported records exist) */}
+          {/* Historical Doctors */}
           {historicalDoctorsData.length > 0 && (
-            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
-              <span className="text-[11px] font-semibold text-zinc-400">ทันตแพทย์ในอดีต / ข้อมูลย้อนหลัง</span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 mt-1.5">
+            <div className="pt-2.5 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center space-x-1.5 mb-1.5">
+                <span className="w-2 h-2 rounded-full bg-zinc-400" />
+                <span className="text-[11px] font-bold text-zinc-700 dark:text-zinc-300">ทันตแพทย์ในอดีต / บันทึกย้อนหลัง (3 ท่าน)</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 {historicalDoctorsData.map(doc => (
                   <button
                     key={doc.name}
                     onClick={() => setSelectedDoctor(doc.name)}
-                    className={`p-2.5 rounded-2xl border text-left transition-all duration-150 ${
+                    className={`p-3 rounded-2xl border text-left transition-all duration-150 ${
                       selectedDoctor === doc.name
                         ? 'border-zinc-700 bg-zinc-100 dark:bg-zinc-800 ring-1 ring-zinc-500 shadow-xs'
                         : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-900/40 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                     }`}
                   >
-                    <div className="flex items-center space-x-2">
-                      <div className={`w-6 h-6 rounded-xl ${doc.color} text-white flex items-center justify-center text-[10px] font-bold`}>
+                    <div className="flex items-center space-x-2.5">
+                      <div className={`w-7 h-7 rounded-xl ${doc.color} text-white flex items-center justify-center text-xs font-bold opacity-80`}>
                         {doc.name.charAt(0)}
                       </div>
-                      <div className="overflow-hidden">
-                        <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
-                          {doc.name}
+                      <div className="overflow-hidden flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
+                            {doc.name}
+                          </span>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 font-medium">
+                            อดีต
+                          </span>
                         </div>
                         <div className="text-[10px] text-zinc-400 font-mono">
-                          {doc.totalCases} เคส
+                          {doc.totalCases} เคส • {doc.periodLabel || 'ย้อนหลัง'}
                         </div>
                       </div>
                     </div>
@@ -225,11 +226,20 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
                   {activeDocData.name.charAt(0)}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
-                    {activeDocData.fullName}
-                  </h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    ทันตแพทย์ชำนาญการ • รพ.พยุหะคีรี
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+                      {activeDocData.fullName}
+                    </h3>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                      activeDocData.isHistorical
+                        ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700'
+                        : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40'
+                    }`}>
+                      {activeDocData.isHistorical ? 'แพทย์ในอดีต' : 'ปฏิบัติงานปัจจุบัน'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    {activeDocData.isHistorical ? `${activeDocData.periodLabel || 'บันทึกประวัติย้อนหลัง'} • รพ.พยุหะคีรี` : 'ทันตแพทย์ชำนาญการ • รพ.พยุหะคีรี'}
                   </p>
                 </div>
               </div>

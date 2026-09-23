@@ -17,6 +17,7 @@ import {
   Scale
 } from 'lucide-react';
 import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName, normalizeRecordDate, getYearBE } from '../types';
+import { YearlyComparisonBarChart } from './YearlyComparisonBarChart';
 
 interface DashboardViewProps {
   records: DentureRecord[];
@@ -24,6 +25,7 @@ interface DashboardViewProps {
   onViewRecord: (record: DentureRecord) => void;
   onOpenScanner: () => void;
   onOpenPdfUpload?: () => void;
+  onNavigateToTrends?: () => void;
   isPdpaMode?: boolean;
 }
 
@@ -33,6 +35,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onViewRecord,
   onOpenScanner,
   onOpenPdfUpload,
+  onNavigateToTrends,
   isPdpaMode = false,
 }) => {
   // Date / Time Range Filter States
@@ -126,12 +129,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const feeSum = docRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
       const netSum = feeSum - labSum;
       const color = current ? current.color : extraColors[extraColorIdx++ % extraColors.length];
+      const isCurrent = current ? current.isCurrent : false;
 
       return {
         name: docName,
         fullName: current ? current.fullName : `ทพ./ทพญ. ${docName}`,
         color,
-        isCurrent: !!current,
+        isCurrent,
+        periodLabel: current?.periodLabel,
         count,
         labSum,
         feeSum,
@@ -335,6 +340,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <Filter className="w-3 h-3" />
             <span>กำหนดช่วงวันเอง</span>
           </button>
+
+          {onNavigateToTrends && (
+            <button
+              onClick={onNavigateToTrends}
+              className="sm:ml-auto px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-xs"
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>วิเคราะห์แนวโน้ม 4 ปี & คาดการณ์ 2570 ➔</span>
+            </button>
+          )}
         </div>
 
         {/* Month selector row (when a year is chosen or always accessible) */}
@@ -528,6 +543,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
+      {/* Yearly Comparative Bar Chart (4 Years: 2566 - 2569) */}
+      <YearlyComparisonBarChart records={records} isPdpaMode={isPdpaMode} />
+
       {/* Dentists Workload Section (Dynamic) */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -553,14 +571,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                       {doc.name}
                     </h4>
-                    {!doc.isCurrent && (
-                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-medium">
+                    {!doc.isCurrent ? (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium" title="ทันตแพทย์ในอดีต (ข้อมูลย้อนหลัง)">
                         อดีต
+                      </span>
+                    ) : (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-medium">
+                        ปัจจุบัน
                       </span>
                     )}
                   </div>
                   <p className="text-[10px] text-zinc-400 truncate">
-                    {doc.fullName}
+                    {doc.periodLabel || doc.fullName}
                   </p>
                 </div>
               </div>

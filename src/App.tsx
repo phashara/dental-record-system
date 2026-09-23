@@ -2,6 +2,7 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Header } from './components/Header';
 import { DashboardView } from './components/DashboardView';
 import { TableView } from './components/TableView';
+import { YearlyTrendsView } from './components/YearlyTrendsView';
 import { DoctorsView } from './components/DoctorsView';
 import { LabCostSummaryView } from './components/LabCostSummaryView';
 import { CameraScannerModal } from './components/CameraScannerModal';
@@ -300,6 +301,7 @@ export default function App() {
             onViewRecord={r => setSelectedRecordForDetail(r)}
             onOpenScanner={() => setIsScannerOpen(true)}
             onOpenPdfUpload={() => setIsPdfModalOpen(true)}
+            onNavigateToTrends={() => setCurrentTab('trends')}
             isPdpaMode={isPdpaMode}
           />
         )}
@@ -317,6 +319,14 @@ export default function App() {
             selectedDoctorFilter={tableDoctorFilter}
             onClearDoctorFilter={() => setTableDoctorFilter('all')}
             onExportCsv={() => dentureStorage.exportToCsv(isPdpaMode)}
+            isPdpaMode={isPdpaMode}
+          />
+        )}
+
+        {currentTab === 'trends' && (
+          <YearlyTrendsView
+            records={records}
+            onViewRecord={r => setSelectedRecordForDetail(r)}
             isPdpaMode={isPdpaMode}
           />
         )}
@@ -385,7 +395,7 @@ export default function App() {
             }`}
           >
             <Users className="w-5 h-5 mb-0.5" />
-            <span>หมอ 5 คน</span>
+            <span>ทันตแพทย์</span>
           </button>
 
           <button

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, X, Check, RefreshCw, AlertCircle, FileText, Sparkles, SwitchCamera, Image as ImageIcon } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, normalizeDoctorName } from '../types';
+import { DentureRecord, DOCTORS_LIST, ACTIVE_DOCTORS, FORMER_DOCTORS, COVERAGE_CATEGORIES, resolveCoverage, normalizeDoctorName } from '../types';
 
 interface CameraScannerModalProps {
   isOpen: boolean;
@@ -324,12 +324,9 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
 1. การ์ด OPD ทันตกรรม (ใบตรวจผู้ป่วยนอก) มีช่อง HN, ชื่อ-สกุล, วันที่, การวินิจฉัย (Diagnosis เช่น K081 Loss of teeth), ตารางหัตถการ, ค่าแลป, ลายเซ็นทันตแพทย์
 2. ใบทับเบียนฟันปลอม หรือ บัญชีรายชื่อผู้รับบริการฟันปลอม (ตารางหลายแถว)
 
-รายชื่อทันตแพทย์ 5 ท่านในระบบ (จับคู่ชื่อแพทย์กับ 5 ท่านนี้):
-1. ทพญ.ชิดชนก
-2. ทพญ.วีรยา
-3. ทพญ.จิณณพัต
-4. ทพญ.กนกวรรณ
-5. ทพญ.ศศิมนต์
+รายชื่อทันตแพทย์ 8 ท่านในระบบ (จับคู่ชื่อแพทย์กับ 8 ท่านนี้ โดยแยกทันตแพทย์ปัจจุบันและทันตแพทย์ในอดีต):
+- ทันตแพทย์ปัจจุบัน (5 ท่าน): ทพญ.ชิดชนก, ทพญ.วีรยา, ทพญ.จิณณพัต, ทพญ.กนกวรรณ, ทพญ.ศศิมนต์
+- ทันตแพทย์ในอดีต (3 ท่าน): ทพญ.บุณยาพร, ทพญ.สุนิษา, ทพญ.พัชรพรรณ
 
 กรุณาวิเคราะห์ภาพอย่างละเอียด และส่งออกผลลัพธ์เป็น JSON ล้วนในโครงสร้าง:
 {
@@ -342,7 +339,7 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
       "age": "อายุ",
       "gender": "ชาย หรือ หญิง",
       "date": "YYYY-MM-DD",
-      "doctor": "ชื่อแพทย์ 1 ใน 5 ท่าน",
+      "doctor": "ชื่อแพทย์ 1 ใน 8 ท่าน (เช่น กนกวรรณ, ศศิมนต์, วีรยา, จิณณพัต, ชิดชนก, บุณยาพร, สุนิษา, พัชรพรรณ)",
       "dentureType": "เช่น CD, APD, UTP, ซ่อม",
       "denturePosition": "บน, ล่าง, บนและล่าง",
       "coverage": "สิทธิการรักษา เช่น 30 บาท, อสม, ต้นสังกัด (ระบบจ่ายตรง), ชำระเงินเอง",
@@ -761,18 +758,27 @@ export const CameraScannerModal: React.FC<CameraScannerModalProps> = ({
                     {/* Doctor (5 doctors) */}
                     <div>
                       <label className="block text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mb-1">
-                        ทันตแพทย์ผู้รักษา (5 ท่าน)
+                        ทันตแพทย์ผู้รักษา (8 ท่าน)
                       </label>
                       <select
                         value={normalizeDoctorName(rec.doctor)}
                         onChange={e => handleUpdateRecordField(idx, 'doctor', normalizeDoctorName(e.target.value))}
                         className="w-full px-3 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-blue-700 dark:text-blue-300"
                       >
-                        {DOCTORS_LIST.map(doc => (
-                          <option key={doc.name} value={doc.name}>
-                            {doc.fullName} ({doc.name})
-                          </option>
-                        ))}
+                        <optgroup label="ทันตแพทย์ปฏิบัติงานปัจจุบัน (5 ท่าน)">
+                          {ACTIVE_DOCTORS.map(doc => (
+                            <option key={doc.name} value={doc.name}>
+                              {doc.fullName} ({doc.name})
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="ทันตแพทย์ในอดีต (3 ท่าน - ข้อมูลย้อนหลัง)">
+                          {FORMER_DOCTORS.map(doc => (
+                            <option key={doc.name} value={doc.name}>
+                              {doc.fullName} ({doc.name}) - [อดีต]
+                            </option>
+                          ))}
+                        </optgroup>
                       </select>
                     </div>
 

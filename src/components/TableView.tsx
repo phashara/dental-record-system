@@ -18,7 +18,7 @@ import {
   Square,
   X
 } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName } from '../types';
+import { DentureRecord, DOCTORS_LIST, ACTIVE_DOCTORS, FORMER_DOCTORS, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName } from '../types';
 import { CoverageSliderFilter } from './CoverageSliderFilter';
 import { thaiBahtText } from '../lib/bahtText';
 
@@ -216,16 +216,23 @@ export const TableView: React.FC<TableViewProps> = ({
               onChange={e => setDoctorFilter(e.target.value)}
               className="text-xs py-1 px-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-none text-zinc-800 dark:text-zinc-200 font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none"
             >
-              <option value="all">ทันตแพทย์ทั้งหมด</option>
-              <optgroup label="ทันตแพทย์ปัจจุบัน (5 ท่าน)">
-                {DOCTORS_LIST.map(doc => (
+              <option value="all">ทันตแพทย์ทั้งหมด (8 ท่าน)</option>
+              <optgroup label="ทันตแพทย์ปฏิบัติงานปัจจุบัน (5 ท่าน)">
+                {ACTIVE_DOCTORS.map(doc => (
                   <option key={doc.name} value={doc.name}>
                     {doc.fullName} ({doc.name})
                   </option>
                 ))}
               </optgroup>
+              <optgroup label="ทันตแพทย์ในอดีต (3 ท่าน - ข้อมูลย้อนหลัง)">
+                {FORMER_DOCTORS.map(doc => (
+                  <option key={doc.name} value={doc.name}>
+                    {doc.fullName} ({doc.name}) - [อดีต]
+                  </option>
+                ))}
+              </optgroup>
               {historicalDoctors.length > 0 && (
-                <optgroup label="ทันตแพทย์ในอดีต / ข้อมูลย้อนหลัง">
+                <optgroup label="แพทย์อื่น ๆ / ข้อมูลเดิม">
                   {historicalDoctors.map(doc => (
                     <option key={doc} value={doc}>
                       {doc} (แพทย์ในอดีต)

@@ -31,6 +31,8 @@ import {
 import {
   DentureRecord,
   DOCTORS_LIST,
+  ACTIVE_DOCTORS,
+  FORMER_DOCTORS,
   COVERAGE_CATEGORIES,
   resolveCoverage,
   normalizeDoctorName,
@@ -512,7 +514,7 @@ export const PdfBatchUploadModal: React.FC<PdfBatchUploadModalProps> = ({
                   <Sparkles className="w-3.5 h-3.5 mr-1" /> แยกแยะสิทธิการรักษา 7 หมวด
                 </span>
                 <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                  <Stethoscope className="w-3.5 h-3.5 mr-1" /> แมปชื่อทันตแพทย์ 5 ท่าน
+                  <Stethoscope className="w-3.5 h-3.5 mr-1" /> แมปชื่อทันตแพทย์ (8 ท่าน)
                 </span>
               </div>
             </div>
@@ -839,7 +841,7 @@ export const PdfBatchUploadModal: React.FC<PdfBatchUploadModalProps> = ({
                         {/* Dentist (5 doctors) */}
                         <div>
                           <label className="block text-[11px] font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                            ทันตแพทย์ผู้รักษา (5 ท่าน)
+                            ทันตแพทย์ผู้รักษา (8 ท่าน)
                           </label>
                           <div className="relative">
                             <Stethoscope className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-zinc-400" />
@@ -848,11 +850,20 @@ export const PdfBatchUploadModal: React.FC<PdfBatchUploadModalProps> = ({
                               onChange={(e) => updateCurrentRecord(rIdx, 'doctor', e.target.value)}
                               className="w-full pl-8 pr-2.5 py-1.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-blue-500 font-semibold"
                             >
-                              {DOCTORS_LIST.map((doc) => (
-                                <option key={doc.name} value={doc.name}>
-                                  {doc.name} ({doc.fullName})
-                                </option>
-                              ))}
+                              <optgroup label="ทันตแพทย์ปฏิบัติงานปัจจุบัน (5 ท่าน)">
+                                {ACTIVE_DOCTORS.map((doc) => (
+                                  <option key={doc.name} value={doc.name}>
+                                    {doc.name} ({doc.fullName})
+                                  </option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="ทันตแพทย์ในอดีต (3 ท่าน - ข้อมูลย้อนหลัง)">
+                                {FORMER_DOCTORS.map((doc) => (
+                                  <option key={doc.name} value={doc.name}>
+                                    {doc.name} ({doc.fullName}) - [อดีต]
+                                  </option>
+                                ))}
+                              </optgroup>
                             </select>
                           </div>
                         </div>

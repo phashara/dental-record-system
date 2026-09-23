@@ -4,19 +4,45 @@ export type DoctorName =
   | 'ทพญ.ชิดชนก สถิรวิชย์'
   | 'ทพญ.วีรยา จารุวัต'
   | 'ทพญ.จิณณพัต อินทร์ยัง'
+  | 'ทพญ.บุณยาพร'
+  | 'ทพญ.สุนิษา'
+  | 'ทพญ.พัชรพรรณ'
   | 'กนกวรรณ'
   | 'ศศิมนต์'
   | 'ชิดชนก'
   | 'วีรยา'
   | 'จิณณพัต'
+  | 'บุณยาพร'
+  | 'สุนิษา'
+  | 'พัชรพรรณ'
   | string;
 
-export const DOCTORS_LIST = [
-  { name: 'กนกวรรณ', fullName: 'ทพญ.กนกวรรณ พัฒนกิจจารักษ์', color: 'bg-teal-500' },
-  { name: 'ศศิมนต์', fullName: 'ทพญ.ศศิมนต์ วงศ์วัชรานนท์', color: 'bg-purple-500' },
-  { name: 'ชิดชนก', fullName: 'ทพญ.ชิดชนก สถิรวิชย์', color: 'bg-emerald-500' },
-  { name: 'วีรยา', fullName: 'ทพญ.วีรยา จารุวัต', color: 'bg-amber-500' },
-  { name: 'จิณณพัต', fullName: 'ทพญ.จิณณพัต อินทร์ยัง', color: 'bg-indigo-500' },
+export interface DoctorDefinition {
+  name: string;
+  fullName: string;
+  color: string;
+  isCurrent: boolean;
+  statusLabel: 'ปัจจุบัน' | 'อดีต';
+  periodLabel?: string;
+}
+
+export const ACTIVE_DOCTORS: readonly DoctorDefinition[] = [
+  { name: 'กนกวรรณ', fullName: 'ทพญ.กนกวรรณ พัฒนกิจจารักษ์', color: 'bg-teal-500', isCurrent: true, statusLabel: 'ปัจจุบัน' },
+  { name: 'ศศิมนต์', fullName: 'ทพญ.ศศิมนต์ วงศ์วัชรานนท์', color: 'bg-purple-500', isCurrent: true, statusLabel: 'ปัจจุบัน' },
+  { name: 'วีรยา', fullName: 'ทพญ.วีรยา จารุวัต', color: 'bg-amber-500', isCurrent: true, statusLabel: 'ปัจจุบัน' },
+  { name: 'จิณณพัต', fullName: 'ทพญ.จิณณพัต อินทร์ยัง', color: 'bg-indigo-500', isCurrent: true, statusLabel: 'ปัจจุบัน' },
+  { name: 'ชิดชนก', fullName: 'ทพญ.ชิดชนก สถิรวิชย์', color: 'bg-emerald-500', isCurrent: true, statusLabel: 'ปัจจุบัน' },
+] as const;
+
+export const FORMER_DOCTORS: readonly DoctorDefinition[] = [
+  { name: 'บุณยาพร', fullName: 'ทพญ.บุณยาพร', color: 'bg-rose-500', isCurrent: false, statusLabel: 'อดีต', periodLabel: 'อดีต (2566–2568)' },
+  { name: 'สุนิษา', fullName: 'ทพญ.สุนิษา', color: 'bg-orange-500', isCurrent: false, statusLabel: 'อดีต', periodLabel: 'อดีต (2566–2567)' },
+  { name: 'พัชรพรรณ', fullName: 'ทพญ.พัชรพรรณ', color: 'bg-slate-500', isCurrent: false, statusLabel: 'อดีต', periodLabel: 'อดีต (2568)' },
+] as const;
+
+export const DOCTORS_LIST: readonly DoctorDefinition[] = [
+  ...ACTIVE_DOCTORS,
+  ...FORMER_DOCTORS,
 ] as const;
 
 /**
@@ -35,8 +61,9 @@ export function normalizeDoctorName(raw: string | undefined | null): string {
   if (clean.includes('จิณณพัต')) return 'จิณณพัต';
 
   // Historical archive dentists
-  if (clean.includes('สุนิษา')) return 'สุนิษา';
   if (clean.includes('บุณยาพร')) return 'บุณยาพร';
+  if (clean.includes('สุนิษา')) return 'สุนิษา';
+  if (clean.includes('พัชรพรรณ')) return 'พัชรพรรณ';
 
   // Strip prefixes like ทพญ., ทพ., ทญ., หมอ, etc.
   return clean
@@ -356,7 +383,7 @@ export interface OCRScanResult {
   detectedHandwriting?: string;
 }
 
-export type ViewTab = 'dashboard' | 'records' | 'doctors' | 'lab';
+export type ViewTab = 'dashboard' | 'records' | 'trends' | 'doctors' | 'lab';
 
 // PDPA / Medical privacy masking helpers
 export function maskPatientName(name: string): string {
