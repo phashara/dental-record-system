@@ -1,5 +1,5 @@
 import React from 'react';
-import { Camera, Plus, Moon, Sun, Download, RefreshCw, Wifi, WifiOff, Stethoscope, ShieldCheck, Github, EyeOff, Eye, Database, Lock, FileText } from 'lucide-react';
+import { Camera, Plus, Moon, Sun, Download, RefreshCw, Wifi, WifiOff, Stethoscope, ShieldCheck, Github, EyeOff, Eye, Database, Lock, FileText, FileSpreadsheet } from 'lucide-react';
 import { ViewTab } from '../types';
 
 interface HeaderProps {
@@ -7,6 +7,7 @@ interface HeaderProps {
   onTabChange: (tab: ViewTab) => void;
   onOpenScanner: () => void;
   onOpenPdfUpload: () => void;
+  onOpenExcelImport: () => void;
   onOpenAddModal: () => void;
   isDark: boolean;
   onToggleDark: () => void;
@@ -27,6 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
   onTabChange,
   onOpenScanner,
   onOpenPdfUpload,
+  onOpenExcelImport,
   onOpenAddModal,
   isDark,
   onToggleDark,
@@ -207,6 +209,17 @@ export const Header: React.FC<HeaderProps> = ({
               aria-label="เปลี่ยนโหมดสี"
             >
               {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-zinc-600" />}
+            </button>
+
+            {/* Excel / CSV Import Button */}
+            <button
+              onClick={onOpenExcelImport}
+              className="flex items-center space-x-1.5 px-3 sm:px-3.5 py-2 rounded-2xl text-xs sm:text-sm font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 active:scale-95 shadow-xs transition-all duration-150"
+              title="นำเข้าข้อมูลจากไฟล์ Excel (.xlsx / .csv) รองรับข้อมูลย้อนหลัง 2566 - 2569"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden sm:inline">นำเข้า Excel</span>
+              <span className="sm:hidden">Excel</span>
             </button>
 
             {/* Batch PDF Upload Button */}

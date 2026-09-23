@@ -17,7 +17,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
 }) => {
   const [selectedDoctor, setSelectedDoctor] = useState<string>(DOCTORS_LIST[0]?.name || 'กนกวรรณ');
 
-  // Compute stats for all 5 doctors
+  // Compute stats for all 5 current doctors
   const doctorsData = DOCTORS_LIST.map(doc => {
     const docRecords = records.filter(r => normalizeDoctorName(r.doctor) === doc.name || r.doctor?.includes(doc.name));
     const totalCases = docRecords.length;
@@ -33,6 +33,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
 
     return {
       ...doc,
+      isHistorical: false,
       totalCases,
       totalLab,
       totalFee,
@@ -42,7 +43,46 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
     };
   });
 
-  const activeDocData = doctorsData.find(d => d.name === selectedDoctor) || doctorsData[0];
+  // Compute stats for historical doctors from legacy records (e.g. 2566 - 2569)
+  const historicalDoctorsData = React.useMemo(() => {
+    const activeNames = new Set<string>(DOCTORS_LIST.map(d => d.name));
+    const historyDocNames = new Set<string>();
+    records.forEach(r => {
+      const clean = normalizeDoctorName(r.doctor);
+      if (clean && !activeNames.has(clean)) {
+        historyDocNames.add(clean);
+      }
+    });
+
+    const palette = ['bg-slate-600', 'bg-zinc-600', 'bg-stone-600', 'bg-teal-700', 'bg-indigo-700'];
+    return Array.from(historyDocNames).sort().map((docName, idx) => {
+      const docRecords = records.filter(r => normalizeDoctorName(r.doctor) === docName || r.doctor?.includes(docName));
+      const totalCases = docRecords.length;
+      const totalLab = docRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
+      const totalFee = docRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
+      const types: Record<string, number> = {};
+      docRecords.forEach(r => {
+        const t = r.dentureType || 'อื่นๆ';
+        types[t] = (types[t] || 0) + 1;
+      });
+
+      return {
+        name: docName,
+        fullName: `ทพ./ทพญ. ${docName}`,
+        color: palette[idx % palette.length],
+        isHistorical: true,
+        totalCases,
+        totalLab,
+        totalFee,
+        avgLab: totalCases > 0 ? totalLab / totalCases : 0,
+        types,
+        records: docRecords,
+      };
+    });
+  }, [records]);
+
+  const allDoctors = [...doctorsData, ...historicalDoctorsData];
+  const activeDocData = allDoctors.find(d => d.name === selectedDoctor) || allDoctors[0];
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-150">
@@ -62,32 +102,71 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
         </div>
 
         {/* Doctor Selector Pills */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-5">
-          {doctorsData.map(doc => (
-            <button
-              key={doc.name}
-              onClick={() => setSelectedDoctor(doc.name)}
-              className={`p-3 rounded-2xl border text-left transition-all duration-150 ${
-                selectedDoctor === doc.name
-                  ? 'border-blue-600 bg-blue-50/60 dark:bg-blue-950/40 ring-1 ring-blue-500 shadow-xs'
-                  : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-900/40 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-              }`}
-            >
-              <div className="flex items-center space-x-2">
-                <div className={`w-7 h-7 rounded-xl ${doc.color} text-white flex items-center justify-center text-xs font-bold`}>
-                  {doc.name.charAt(0)}
-                </div>
-                <div className="overflow-hidden">
-                  <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">
-                    {doc.name}
+        <div className="mt-5 space-y-3">
+          <div>
+            <span className="text-[11px] font-semibold text-zinc-400">ทันตแพทย์ปัจจุบัน (5 ท่าน)</span>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-1.5">
+              {doctorsData.map(doc => (
+                <button
+                  key={doc.name}
+                  onClick={() => setSelectedDoctor(doc.name)}
+                  className={`p-3 rounded-2xl border text-left transition-all duration-150 ${
+                    selectedDoctor === doc.name
+                      ? 'border-blue-600 bg-blue-50/60 dark:bg-blue-950/40 ring-1 ring-blue-500 shadow-xs'
+                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-900/40 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-7 h-7 rounded-xl ${doc.color} text-white flex items-center justify-center text-xs font-bold`}>
+                      {doc.name.charAt(0)}
+                    </div>
+                    <div className="overflow-hidden">
+                      <div className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                        {doc.name}
+                      </div>
+                      <div className="text-[10px] text-zinc-400 font-mono">
+                        {doc.totalCases} เคส
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[10px] text-zinc-400 font-mono">
-                    {doc.totalCases} เคส
-                  </div>
-                </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Historical Doctors (if legacy imported records exist) */}
+          {historicalDoctorsData.length > 0 && (
+            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+              <span className="text-[11px] font-semibold text-zinc-400">ทันตแพทย์ในอดีต / ข้อมูลย้อนหลัง</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 mt-1.5">
+                {historicalDoctorsData.map(doc => (
+                  <button
+                    key={doc.name}
+                    onClick={() => setSelectedDoctor(doc.name)}
+                    className={`p-2.5 rounded-2xl border text-left transition-all duration-150 ${
+                      selectedDoctor === doc.name
+                        ? 'border-zinc-700 bg-zinc-100 dark:bg-zinc-800 ring-1 ring-zinc-500 shadow-xs'
+                        : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-900/40 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-6 h-6 rounded-xl ${doc.color} text-white flex items-center justify-center text-[10px] font-bold`}>
+                        {doc.name.charAt(0)}
+                      </div>
+                      <div className="overflow-hidden">
+                        <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
+                          {doc.name}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 font-mono">
+                          {doc.totalCases} เคส
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
-            </button>
-          ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -154,12 +233,13 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
               </h4>
               <div className="space-y-2">
                 {Object.entries(activeDocData.types).map(([type, count]) => {
-                  const pct = activeDocData.totalCases > 0 ? Math.round((count / activeDocData.totalCases) * 100) : 0;
+                  const numCount = Number(count);
+                  const pct = activeDocData.totalCases > 0 ? Math.round((numCount / activeDocData.totalCases) * 100) : 0;
                   return (
                     <div key={type} className="text-xs space-y-1">
                       <div className="flex justify-between text-zinc-600 dark:text-zinc-300">
                         <span>{type}</span>
-                        <span className="font-mono">{count} เคส ({pct}%)</span>
+                        <span className="font-mono">{numCount} เคส ({pct}%)</span>
                       </div>
                       <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
                         <div

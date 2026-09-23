@@ -31,6 +31,7 @@ interface DataManagementModalProps {
   records: DentureRecord[];
   onRecordsUpdated: () => void;
   onOpenLockScreen: () => void;
+  onOpenExcelImport?: () => void;
 }
 
 export const DataManagementModal: React.FC<DataManagementModalProps> = ({
@@ -39,6 +40,7 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
   records,
   onRecordsUpdated,
   onOpenLockScreen,
+  onOpenExcelImport,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'export' | 'denture_types' | 'backup' | 'reset'>('overview');
   const [importStatus, setImportStatus] = useState<string | null>(null);
@@ -777,6 +779,35 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
                   <span>ดาวน์โหลดไฟล์สำรอง JSON</span>
                 </button>
               </div>
+
+              {/* Import from Excel / CSV (New Feature) */}
+              {onOpenExcelImport && (
+                <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border-2 border-emerald-200 dark:border-emerald-800/60 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200 flex items-center space-x-1.5">
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span>นำเข้าจากไฟล์ Excel (.xlsx / .xls / .csv)</span>
+                    </h4>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 font-bold">
+                      รองรับปี 2566 - 2569
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-800/80 dark:text-emerald-300 leading-relaxed">
+                    นำเข้าไฟล์บันทึกงานฟันปลอมย้อนหลัง ระบบจะสแกนคอลัมน์อัตโนมัติ ตรวจสอบความซ้ำซ้อน และจัดกลุ่มสิทธิการรักษา 7 หมวดให้อัตโนมัติ
+                  </p>
+                  
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenExcelImport();
+                    }}
+                    className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    <span>เปิดหน้าต่างนำเข้า Excel</span>
+                  </button>
+                </div>
+              )}
 
               {/* Restore / Import */}
               <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 space-y-3">

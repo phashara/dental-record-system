@@ -178,21 +178,30 @@ export const RecordFormModal: React.FC<RecordFormModalProps> = ({
               </select>
             </div>
 
-            {/* Doctor Selection (5 doctors) */}
+            {/* Doctor Selection (5 doctors + historical doctor support) */}
             <div>
               <label className="block font-medium text-zinc-600 dark:text-zinc-300 mb-1">
-                ทันตแพทย์ผู้รักษา (5 ท่าน) *
+                ทันตแพทย์ผู้รักษา *
               </label>
               <select
-                value={normalizeDoctorName(formData.doctor)}
-                onChange={e => setFormData({ ...formData, doctor: normalizeDoctorName(e.target.value) })}
+                value={formData.doctor}
+                onChange={e => setFormData({ ...formData, doctor: e.target.value })}
                 className="w-full px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-none text-blue-700 dark:text-blue-300 font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
-                {DOCTORS_LIST.map(doc => (
-                  <option key={doc.name} value={doc.name}>
-                    {doc.fullName} ({doc.name})
-                  </option>
-                ))}
+                <optgroup label="ทันตแพทย์ปัจจุบัน (5 ท่าน)">
+                  {DOCTORS_LIST.map(doc => (
+                    <option key={doc.name} value={doc.name}>
+                      {doc.fullName} ({doc.name})
+                    </option>
+                  ))}
+                </optgroup>
+                {formData.doctor && !DOCTORS_LIST.some(d => d.name === normalizeDoctorName(formData.doctor)) && (
+                  <optgroup label="แพทย์ในอดีต / ข้อมูลเดิม">
+                    <option value={formData.doctor}>
+                      {formData.doctor} (แพทย์ในอดีต)
+                    </option>
+                  </optgroup>
+                )}
               </select>
             </div>
 

@@ -10,6 +10,7 @@ import { RecordFormModal } from './components/RecordFormModal';
 import { GitHubAndPrivacyModal } from './components/GitHubAndPrivacyModal';
 import { IPhoneLockScreen } from './components/IPhoneLockScreen';
 import { DataManagementModal } from './components/DataManagementModal';
+import { ExcelImportModal } from './components/ExcelImportModal';
 import { DentureRecord, ViewTab } from './types';
 import { dentureStorage } from './lib/storage';
 import {
@@ -121,6 +122,7 @@ export default function App() {
   // Modals state
   const [isScannerOpen, setIsScannerOpen] = useState<boolean>(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState<boolean>(false);
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState<boolean>(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [selectedRecordForDetail, setSelectedRecordForDetail] = useState<DentureRecord | null>(null);
   const [editingRecord, setEditingRecord] = useState<DentureRecord | null>(null);
@@ -247,6 +249,7 @@ export default function App() {
         onTabChange={setCurrentTab}
         onOpenScanner={() => setIsScannerOpen(true)}
         onOpenPdfUpload={() => setIsPdfModalOpen(true)}
+        onOpenExcelImport={() => setIsExcelModalOpen(true)}
         onOpenAddModal={() => {
           setEditingRecord(null);
           setIsAddModalOpen(true);
@@ -440,6 +443,21 @@ export default function App() {
           setRecords(up);
         }}
         onOpenLockScreen={handleLock}
+        onOpenExcelImport={() => setIsExcelModalOpen(true)}
+      />
+
+      {/* Excel / CSV Batch Import Modal (2566 - 2569) */}
+      <ExcelImportModal
+        isOpen={isExcelModalOpen}
+        onClose={() => setIsExcelModalOpen(false)}
+        existingRecords={records}
+        onImportSuccess={(savedCount) => {
+          const up = dentureStorage.getLocalRecords();
+          setRecords(up);
+          showToast(`✓ นำเข้าข้อมูลเวชระเบียน ${savedCount} รายการจากไฟล์ Excel สำเร็จ`);
+          dentureStorage.syncQueueWithFirestore().catch(() => {});
+          setCurrentTab('records');
+        }}
       />
 
       {/* iPhone Passcode Lock Screen (Passcode: 0723) */}

@@ -78,6 +78,19 @@ export const TableView: React.FC<TableViewProps> = ({
     return Array.from(set);
   }, [records]);
 
+  // Unique doctors from records that are not in primary 5 DOCTORS_LIST (for legacy/archive records)
+  const historicalDoctors = useMemo(() => {
+    const activeNames = new Set<string>(DOCTORS_LIST.map(d => d.name));
+    const set = new Set<string>();
+    records.forEach(r => {
+      const clean = normalizeDoctorName(r.doctor);
+      if (clean && !activeNames.has(clean)) {
+        set.add(clean);
+      }
+    });
+    return Array.from(set).sort();
+  }, [records]);
+
   // Filtered and sorted records
   const filteredRecords = useMemo(() => {
     return records
@@ -203,12 +216,23 @@ export const TableView: React.FC<TableViewProps> = ({
               onChange={e => setDoctorFilter(e.target.value)}
               className="text-xs py-1 px-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-none text-zinc-800 dark:text-zinc-200 font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none"
             >
-              <option value="all">หมอทั้งหมด (5 ท่าน)</option>
-              {DOCTORS_LIST.map(doc => (
-                <option key={doc.name} value={doc.name}>
-                  {doc.fullName} ({doc.name})
-                </option>
-              ))}
+              <option value="all">ทันตแพทย์ทั้งหมด</option>
+              <optgroup label="ทันตแพทย์ปัจจุบัน (5 ท่าน)">
+                {DOCTORS_LIST.map(doc => (
+                  <option key={doc.name} value={doc.name}>
+                    {doc.fullName} ({doc.name})
+                  </option>
+                ))}
+              </optgroup>
+              {historicalDoctors.length > 0 && (
+                <optgroup label="ทันตแพทย์ในอดีต / ข้อมูลย้อนหลัง">
+                  {historicalDoctors.map(doc => (
+                    <option key={doc} value={doc}>
+                      {doc} (แพทย์ในอดีต)
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
 
