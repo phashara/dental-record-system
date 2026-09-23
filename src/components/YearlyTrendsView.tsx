@@ -68,6 +68,28 @@ interface YearStats {
   doctorCounts: Record<string, number>;
 }
 
+// Smooth Catmull-Rom to Cubic Bezier spline generator
+function getSplinePath(pts: { x: number; y: number }[], tension = 0.32): string {
+  if (!pts || pts.length === 0) return '';
+  if (pts.length === 1) return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+
+  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = i > 0 ? pts[i - 1] : pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = i < pts.length - 2 ? pts[i + 2] : p2;
+
+    const cp1x = p1.x + (p2.x - p0.x) * tension;
+    const cp1y = p1.y + (p2.y - p0.y) * tension;
+    const cp2x = p2.x - (p3.x - p1.x) * tension;
+    const cp2y = p2.y - (p3.y - p1.y) * tension;
+
+    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
 export const YearlyTrendsView: React.FC<YearlyTrendsViewProps> = ({
   records,
   onViewRecord,
@@ -77,6 +99,7 @@ export const YearlyTrendsView: React.FC<YearlyTrendsViewProps> = ({
   const [selectedYear, setSelectedYear] = useState<string>('2569');
   const [yearType, setYearType] = useState<'calendar' | 'fiscal'>('calendar');
   const [chartMetric, setChartMetric] = useState<'cases' | 'labCost' | 'netMargin'>('cases');
+  const [chartStyle, setChartStyle] = useState<'combo' | 'spline' | 'bar'>('combo');
   const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
 
   // Group records by Thai Buddhist Era year (พ.ศ.)
@@ -288,54 +311,117 @@ export const YearlyTrendsView: React.FC<YearlyTrendsViewProps> = ({
     return { totalCases, totalLab, totalFee, totalNet, avgLabPerCase };
   }, [yearlyData]);
 
-  // Compute SVG chart coordinates
-  const chartPoints = useMemo(() => {
-    if (yearlyData.length === 0) return [];
+  // Compute SVG chart coordinates, gridlines & spline curves
+  const chartGeometry = useMemo(() => {
+    if (yearlyData.length === 0) return null;
     
-    let maxVal = 1;
+    let maxValRaw = 1;
     if (chartMetric === 'cases') {
-      maxVal = Math.max(...yearlyData.map(y => y.totalCases), 100) * 1.15;
+      maxValRaw = Math.max(...yearlyData.map(y => y.totalCases), 100);
     } else if (chartMetric === 'labCost') {
-      maxVal = Math.max(...yearlyData.map(y => y.totalLabCost), 100000) * 1.15;
+      maxValRaw = Math.max(...yearlyData.map(y => y.totalLabCost), 100000);
     } else {
-      maxVal = Math.max(...yearlyData.map(y => y.netMargin), 100000) * 1.15;
+      maxValRaw = Math.max(...yearlyData.map(y => y.netMargin), 100000);
     }
 
-    const width = 800;
-    const height = 240;
-    const padX = 60;
-    const padY = 30;
+    // Nice round ceiling for Y-axis
+    let maxVal = 100;
+    if (chartMetric === 'cases') {
+      maxVal = Math.ceil((maxValRaw * 1.22) / 50) * 50;
+    } else {
+      maxVal = Math.ceil((maxValRaw * 1.22) / 50000) * 50000;
+    }
 
-    const stepX = (width - padX * 2) / (yearlyData.length - 1);
+    const width = 860;
+    const height = 290;
+    const padLeft = 85;
+    const padRight = 60;
+    const padTop = 45;
+    const padBottom = 48;
+    const baseLine = height - padBottom;
+    const plotHeight = baseLine - padTop;
 
-    return yearlyData.map((y, i) => {
+    const stepX = (width - padLeft - padRight) / Math.max(yearlyData.length - 1, 1);
+
+    const points = yearlyData.map((y, i) => {
       let val = 0;
       if (chartMetric === 'cases') val = y.totalCases;
       else if (chartMetric === 'labCost') val = y.totalLabCost;
       else val = y.netMargin;
 
-      const x = padX + i * stepX;
-      const yCoord = height - padY - (val / maxVal) * (height - padY * 2);
-      return { x, y: yCoord, val, yearData: y };
+      const x = padLeft + i * stepX;
+      const yCoord = baseLine - (val / maxVal) * plotHeight;
+      return { x, y: yCoord, val, yearData: y, index: i };
     });
+
+    // Ticks for horizontal gridlines (5 lines: 0, 25%, 50%, 75%, 100%)
+    const yTicks = [0, 0.25, 0.5, 0.75, 1].map(ratio => {
+      const val = maxVal * ratio;
+      const yPos = baseLine - ratio * plotHeight;
+      let label = '';
+      if (chartMetric === 'cases') {
+        label = `${Math.round(val)} เคส`;
+      } else {
+        label = val >= 1000000 
+          ? `฿${(val / 1000000).toFixed(1)}M` 
+          : val >= 1000 
+          ? `฿${Math.round(val / 1000)}k` 
+          : `฿${Math.round(val)}`;
+      }
+      return { val, yPos, label, ratio };
+    });
+
+    // Real recorded points (2566 - 2569)
+    const realPoints = points.filter(p => !p.yearData.isProjected);
+    // Forecast points (2569 transition to 2570)
+    const projPoint = points.find(p => p.yearData.isProjected);
+    const lastRealPoint = realPoints[realPoints.length - 1];
+
+    const realSplinePath = getSplinePath(realPoints);
+    const realAreaPath = realSplinePath && realPoints.length > 0
+      ? `${realSplinePath} L ${lastRealPoint.x.toFixed(1)} ${baseLine} L ${realPoints[0].x.toFixed(1)} ${baseLine} Z`
+      : '';
+
+    let forecastSplinePath = '';
+    let forecastAreaPath = '';
+    if (lastRealPoint && projPoint && realPoints.length >= 2) {
+      const pPrev = realPoints[realPoints.length - 2];
+      const tension = 0.32;
+      const cp1x = lastRealPoint.x + (projPoint.x - pPrev.x) * tension;
+      const cp1y = lastRealPoint.y + (projPoint.y - pPrev.y) * tension;
+      const cp2x = projPoint.x - (projPoint.x - lastRealPoint.x) * tension;
+      const cp2y = projPoint.y;
+      forecastSplinePath = `M ${lastRealPoint.x.toFixed(1)} ${lastRealPoint.y.toFixed(1)} C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${projPoint.x.toFixed(1)} ${projPoint.y.toFixed(1)}`;
+      forecastAreaPath = `${forecastSplinePath} L ${projPoint.x.toFixed(1)} ${baseLine} L ${lastRealPoint.x.toFixed(1)} ${baseLine} Z`;
+    }
+
+    const allSplinePath = getSplinePath(points);
+
+    // Identify peak value in real history
+    const maxRealVal = Math.max(...realPoints.map(p => p.val));
+
+    return {
+      points,
+      realPoints,
+      lastRealPoint,
+      projPoint,
+      realSplinePath,
+      realAreaPath,
+      forecastSplinePath,
+      forecastAreaPath,
+      allSplinePath,
+      maxRealVal,
+      yTicks,
+      maxVal,
+      width,
+      height,
+      padLeft,
+      padRight,
+      padTop,
+      padBottom,
+      baseLine
+    };
   }, [yearlyData, chartMetric]);
-
-  // Generate SVG path string
-  const svgPathD = useMemo(() => {
-    if (chartPoints.length === 0) return '';
-    return chartPoints.reduce((acc, pt, i) => {
-      return i === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`;
-    }, '');
-  }, [chartPoints]);
-
-  // SVG Area path string
-  const svgAreaD = useMemo(() => {
-    if (chartPoints.length === 0) return '';
-    const first = chartPoints[0];
-    const last = chartPoints[chartPoints.length - 1];
-    const baseLine = 240 - 30;
-    return `${svgPathD} L ${last.x} ${baseLine} L ${first.x} ${baseLine} Z`;
-  }, [svgPathD, chartPoints]);
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-200">
@@ -469,215 +555,612 @@ export const YearlyTrendsView: React.FC<YearlyTrendsViewProps> = ({
       <YearlyComparisonBarChart records={records} isPdpaMode={isPdpaMode} />
 
       {/* Main Interactive Chart Section */}
-      <div className="p-6 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-6">
+      <div className="p-6 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-sm space-y-6">
         
-        {/* Chart Header & Metric Selectors */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800 pb-4">
-          <div>
-            <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-50 flex items-center space-x-2">
-              <LineChart className="w-4 h-4 text-blue-600" />
-              <span>กราฟแนวโน้มพัฒนาการรายปี (พ.ศ. 2566 – 2570)</span>
-            </h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              แตะที่จุดบนกราฟเพื่อดูรายละเอียดเชิงลึกและเปรียบเทียบตัวชี้วัดในแต่ละปี
+        {/* Chart Header & Mode / Metric Selectors */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800 pb-5">
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                <LineChart className="w-4 h-4" />
+              </div>
+              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+                กราฟแนวโน้มพัฒนาการรายปี (พ.ศ. 2566 – 2570)
+              </h3>
+              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
+                <Sparkles className="w-2.5 h-2.5 mr-1" /> รวม AI Forecast 2570
+              </span>
+            </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              วิเคราะห์ความต่อเนื่อง 4 ปีเวชระเบียนจริง เปรียบเทียบจุดเปลี่ยนสำคัญ พร้อมพยากรณ์งบประมาณ
             </p>
           </div>
 
-          {/* Metric Selector Buttons */}
-          <div className="flex items-center space-x-1 bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl">
-            <button
-              onClick={() => setChartMetric('cases')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                chartMetric === 'cases'
-                  ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-300 shadow-xs'
-                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
-              }`}
-            >
-              จำนวนเคส (ราย)
-            </button>
-            <button
-              onClick={() => setChartMetric('labCost')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                chartMetric === 'labCost'
-                  ? 'bg-white dark:bg-zinc-700 text-emerald-600 dark:text-emerald-300 shadow-xs'
-                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
-              }`}
-            >
-              งบค่าแลป (฿)
-            </button>
-            <button
-              onClick={() => setChartMetric('netMargin')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                chartMetric === 'netMargin'
-                  ? 'bg-white dark:bg-zinc-700 text-indigo-600 dark:text-indigo-300 shadow-xs'
-                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
-              }`}
-            >
-              ส่วนต่างสุทธิ (฿)
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Chart Style Switcher (Combo / Spline / Bar) */}
+            <div className="flex items-center space-x-1 bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl">
+              <button
+                onClick={() => setChartStyle('combo')}
+                title="กราฟผสม แท่งและเส้นโค้งแนวโน้ม"
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 ${
+                  chartStyle === 'combo'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-300 shadow-xs'
+                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                <span>แท่ง+เส้น</span>
+              </button>
+              <button
+                onClick={() => setChartStyle('spline')}
+                title="เส้นโค้งแนวโน้มสมูทแบบ Spline"
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 ${
+                  chartStyle === 'spline'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-300 shadow-xs'
+                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                <span>เส้นโค้ง</span>
+              </button>
+              <button
+                onClick={() => setChartStyle('bar')}
+                title="กราฟแท่งแนวตั้งเปรียบเทียบ"
+                className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1 ${
+                  chartStyle === 'bar'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-300 shadow-xs'
+                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>แท่ง</span>
+              </button>
+            </div>
+
+            {/* Metric Selector Buttons */}
+            <div className="flex items-center space-x-1 bg-zinc-100 dark:bg-zinc-800/80 p-1 rounded-2xl">
+              <button
+                onClick={() => setChartMetric('cases')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  chartMetric === 'cases'
+                    ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-300 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                จำนวนเคส
+              </button>
+              <button
+                onClick={() => setChartMetric('labCost')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  chartMetric === 'labCost'
+                    ? 'bg-white dark:bg-zinc-700 text-emerald-600 dark:text-emerald-300 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                งบค่าแลป
+              </button>
+              <button
+                onClick={() => setChartMetric('netMargin')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                  chartMetric === 'netMargin'
+                    ? 'bg-white dark:bg-zinc-700 text-indigo-600 dark:text-indigo-300 shadow-xs'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                ส่วนต่างสุทธิ
+              </button>
+            </div>
           </div>
         </div>
 
         {/* SVG Interactive Chart Canvas */}
-        <div className="relative w-full overflow-x-auto">
-          <div className="min-w-[640px] h-[260px] relative select-none">
-            <svg 
-              className="w-full h-full overflow-visible" 
-              viewBox="0 0 800 240"
-              preserveAspectRatio="none"
-            >
-              <defs>
-                <linearGradient id="areaGradientCases" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="areaGradientLab" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                </linearGradient>
-                <linearGradient id="areaGradientMargin" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6366f1" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="#6366f1" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
+        {chartGeometry && (
+          <div className="relative w-full overflow-x-auto select-none">
+            <div className="min-w-[700px] h-[300px] relative">
+              <svg 
+                className="w-full h-full overflow-visible" 
+                viewBox={`0 0 ${chartGeometry.width} ${chartGeometry.height}`}
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <defs>
+                  {/* Drop Shadow for value badges */}
+                  <filter id="badgeShadow" x="-30%" y="-30%" width="160%" height="160%">
+                    <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#09090b" floodOpacity="0.16" />
+                  </filter>
 
-              {/* Horizontal Grid lines */}
-              {[40, 90, 140, 190].map((yLine, idx) => (
+                  {/* Glow filter for active line */}
+                  <filter id="lineGlowCases" x="-10%" y="-30%" width="120%" height="160%">
+                    <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="#2563eb" floodOpacity="0.35" />
+                  </filter>
+                  <filter id="lineGlowLab" x="-10%" y="-30%" width="120%" height="160%">
+                    <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="#059669" floodOpacity="0.35" />
+                  </filter>
+                  <filter id="lineGlowMargin" x="-10%" y="-30%" width="120%" height="160%">
+                    <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="#4f46e5" floodOpacity="0.35" />
+                  </filter>
+
+                  {/* Dynamic Area Gradients */}
+                  <linearGradient id="areaGradientCases" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2563eb" stopOpacity="0.38" />
+                    <stop offset="60%" stopColor="#3b82f6" stopOpacity="0.12" />
+                    <stop offset="100%" stopColor="#60a5fa" stopOpacity="0.0" />
+                  </linearGradient>
+                  <linearGradient id="areaGradientLab" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#059669" stopOpacity="0.38" />
+                    <stop offset="60%" stopColor="#10b981" stopOpacity="0.12" />
+                    <stop offset="100%" stopColor="#34d399" stopOpacity="0.0" />
+                  </linearGradient>
+                  <linearGradient id="areaGradientMargin" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.38" />
+                    <stop offset="60%" stopColor="#6366f1" stopOpacity="0.12" />
+                    <stop offset="100%" stopColor="#818cf8" stopOpacity="0.0" />
+                  </linearGradient>
+
+                  {/* Projected Forecast Gradient */}
+                  <linearGradient id="areaGradientForecast" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.35" />
+                    <stop offset="60%" stopColor="#f59e0b" stopOpacity="0.10" />
+                    <stop offset="100%" stopColor="#fbbf24" stopOpacity="0.0" />
+                  </linearGradient>
+
+                  {/* Column Backdrop Bars Gradients */}
+                  <linearGradient id="barGradientCases" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2563eb" stopOpacity="0.22" />
+                    <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.04" />
+                  </linearGradient>
+                  <linearGradient id="barGradientLab" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#059669" stopOpacity="0.22" />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity="0.04" />
+                  </linearGradient>
+                  <linearGradient id="barGradientMargin" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.22" />
+                    <stop offset="100%" stopColor="#6366f1" stopOpacity="0.04" />
+                  </linearGradient>
+                  <linearGradient id="barGradientForecast" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.22" />
+                    <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.04" />
+                  </linearGradient>
+                </defs>
+
+                {/* Horizontal Grid lines & Left Y-Axis Scale Values */}
+                {chartGeometry.yTicks.map((tick, idx) => (
+                  <g key={idx} className="transition-all duration-300">
+                    <line
+                      x1={chartGeometry.padLeft - 10}
+                      y1={tick.yPos}
+                      x2={chartGeometry.width - chartGeometry.padRight + 15}
+                      y2={tick.yPos}
+                      stroke="currentColor"
+                      className="text-zinc-200/90 dark:text-zinc-800/90"
+                      strokeDasharray="4 4"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={chartGeometry.padLeft - 16}
+                      y={tick.yPos + 4}
+                      textAnchor="end"
+                      className="text-[11px] font-semibold fill-zinc-400 dark:fill-zinc-500 font-mono select-none"
+                    >
+                      {tick.label}
+                    </text>
+                  </g>
+                ))}
+
+                {/* Baseline Line */}
                 <line
-                  key={idx}
-                  x1="50"
-                  y1={yLine}
-                  x2="750"
-                  y2={yLine}
+                  x1={chartGeometry.padLeft - 10}
+                  y1={chartGeometry.baseLine}
+                  x2={chartGeometry.width - chartGeometry.padRight + 15}
+                  y2={chartGeometry.baseLine}
                   stroke="currentColor"
-                  className="text-zinc-100 dark:text-zinc-800"
-                  strokeDasharray="4 4"
+                  className="text-zinc-300 dark:text-zinc-700"
+                  strokeWidth="1.5"
                 />
-              ))}
 
-              {/* Area Under Curve */}
-              {svgAreaD && (
-                <path
-                  d={svgAreaD}
-                  fill={
-                    chartMetric === 'cases' ? 'url(#areaGradientCases)' :
-                    chartMetric === 'labCost' ? 'url(#areaGradientLab)' :
-                    'url(#areaGradientMargin)'
-                  }
-                />
-              )}
+                {/* Backdrop Column Bars (Visible in 'combo' and 'bar' styles) */}
+                {chartStyle !== 'spline' && chartGeometry.points.map((pt, idx) => {
+                  const isSelected = selectedYear.startsWith(pt.yearData.yearBE.substring(0, 4));
+                  const isHovered = hoveredPoint === idx;
+                  const isProj = pt.yearData.isProjected;
+                  const barWidth = 54;
+                  const barHeight = Math.max(chartGeometry.baseLine - pt.y, 4);
 
-              {/* Connection Line */}
-              {svgPathD && (
-                <path
-                  d={svgPathD}
-                  fill="none"
-                  stroke={
-                    chartMetric === 'cases' ? '#2563eb' :
-                    chartMetric === 'labCost' ? '#059669' :
-                    '#4f46e5'
-                  }
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              )}
+                  return (
+                    <g 
+                      key={`bar-${idx}`}
+                      className="cursor-pointer transition-all duration-200"
+                      onClick={() => setSelectedYear(pt.yearData.yearBE.substring(0, 4))}
+                      onMouseEnter={() => setHoveredPoint(idx)}
+                      onMouseLeave={() => setHoveredPoint(null)}
+                    >
+                      <rect
+                        x={pt.x - barWidth / 2}
+                        y={pt.y}
+                        width={barWidth}
+                        height={barHeight}
+                        rx="12"
+                        ry="12"
+                        fill={
+                          isProj
+                            ? 'url(#barGradientForecast)'
+                            : chartMetric === 'cases'
+                            ? 'url(#barGradientCases)'
+                            : chartMetric === 'labCost'
+                            ? 'url(#barGradientLab)'
+                            : 'url(#barGradientMargin)'
+                        }
+                        stroke={
+                          isSelected || isHovered
+                            ? isProj ? '#f59e0b' : chartMetric === 'cases' ? '#2563eb' : chartMetric === 'labCost' ? '#059669' : '#4f46e5'
+                            : 'none'
+                        }
+                        strokeWidth={isSelected || isHovered ? '2' : '0'}
+                        strokeDasharray={isProj ? '4 3' : 'none'}
+                        className="transition-all duration-200"
+                        opacity={isSelected || isHovered ? 1 : 0.8}
+                      />
+                    </g>
+                  );
+                })}
 
-              {/* Data Points */}
-              {chartPoints.map((pt, idx) => {
-                const isSelected = selectedYear.startsWith(pt.yearData.yearBE.substring(0, 4));
-                const isHovered = hoveredPoint === idx;
-                const isProj = pt.yearData.isProjected;
-
-                return (
-                  <g 
-                    key={idx} 
-                    className="cursor-pointer transition-all"
-                    onClick={() => setSelectedYear(pt.yearData.yearBE.substring(0, 4))}
-                    onMouseEnter={() => setHoveredPoint(idx)}
-                    onMouseLeave={() => setHoveredPoint(null)}
-                  >
-                    {/* Vertical indicator line when selected or hovered */}
-                    {(isSelected || isHovered) && (
-                      <line
-                        x1={pt.x}
-                        y1="25"
-                        x2={pt.x}
-                        y2="210"
-                        stroke={isProj ? '#f59e0b' : '#3b82f6'}
-                        strokeWidth="1.5"
-                        strokeDasharray={isProj ? '3 3' : 'none'}
-                        opacity="0.6"
+                {/* Smooth Spline Curves & Glowing Gradient Area (Visible in 'combo' and 'spline' styles) */}
+                {chartStyle !== 'bar' && (
+                  <>
+                    {/* Historical Area Under Curve */}
+                    {chartGeometry.realAreaPath && (
+                      <path
+                        d={chartGeometry.realAreaPath}
+                        fill={
+                          chartMetric === 'cases'
+                            ? 'url(#areaGradientCases)'
+                            : chartMetric === 'labCost'
+                            ? 'url(#areaGradientLab)'
+                            : 'url(#areaGradientMargin)'
+                        }
+                        className="transition-all duration-300"
                       />
                     )}
 
-                    {/* Outer Glow Circle */}
-                    <circle
-                      cx={pt.x}
-                      cy={pt.y}
-                      r={isSelected || isHovered ? "11" : "8"}
-                      className={
-                        isProj
-                          ? 'fill-amber-100 dark:fill-amber-900/60'
-                          : chartMetric === 'cases'
-                          ? 'fill-blue-100 dark:fill-blue-900/60'
-                          : chartMetric === 'labCost'
-                          ? 'fill-emerald-100 dark:fill-emerald-900/60'
-                          : 'fill-indigo-100 dark:fill-indigo-900/60'
-                      }
-                    />
+                    {/* Projected Forecast Area */}
+                    {chartGeometry.forecastAreaPath && (
+                      <path
+                        d={chartGeometry.forecastAreaPath}
+                        fill="url(#areaGradientForecast)"
+                        className="transition-all duration-300"
+                      />
+                    )}
 
-                    {/* Inner Core Circle */}
-                    <circle
-                      cx={pt.x}
-                      cy={pt.y}
-                      r={isSelected || isHovered ? "6" : "4.5"}
-                      className={
-                        isProj
-                          ? 'fill-amber-500 stroke-white dark:stroke-zinc-900'
-                          : chartMetric === 'cases'
-                          ? 'fill-blue-600 stroke-white dark:stroke-zinc-900'
-                          : chartMetric === 'labCost'
-                          ? 'fill-emerald-600 stroke-white dark:stroke-zinc-900'
-                          : 'fill-indigo-600 stroke-white dark:stroke-zinc-900'
-                      }
-                      strokeWidth="2.5"
-                    />
+                    {/* Historical Spline Connection Line */}
+                    {chartGeometry.realSplinePath && (
+                      <path
+                        d={chartGeometry.realSplinePath}
+                        fill="none"
+                        stroke={
+                          chartMetric === 'cases'
+                            ? '#2563eb'
+                            : chartMetric === 'labCost'
+                            ? '#059669'
+                            : '#4f46e5'
+                        }
+                        strokeWidth="3.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        filter={
+                          chartMetric === 'cases'
+                            ? 'url(#lineGlowCases)'
+                            : chartMetric === 'labCost'
+                            ? 'url(#lineGlowLab)'
+                            : 'url(#lineGlowMargin)'
+                        }
+                        className="transition-all duration-300"
+                      />
+                    )}
 
-                    {/* Data Value Label above circle */}
-                    <text
-                      x={pt.x}
-                      y={pt.y - 14}
-                      textAnchor="middle"
-                      className={`text-[11px] font-bold ${
-                        isSelected || isHovered
-                          ? 'fill-zinc-900 dark:fill-zinc-50'
-                          : 'fill-zinc-600 dark:fill-zinc-400'
-                      }`}
+                    {/* Forecast Spline Connection Line (Dashed) */}
+                    {chartGeometry.forecastSplinePath && (
+                      <path
+                        d={chartGeometry.forecastSplinePath}
+                        fill="none"
+                        stroke="#f59e0b"
+                        strokeWidth="3.2"
+                        strokeDasharray="6 6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="transition-all duration-300"
+                      />
+                    )}
+                  </>
+                )}
+
+                {/* Vertical Cursor Beam & Interactive Points */}
+                {chartGeometry.points.map((pt, idx) => {
+                  const isSelected = selectedYear.startsWith(pt.yearData.yearBE.substring(0, 4));
+                  const isHovered = hoveredPoint === idx;
+                  const isProj = pt.yearData.isProjected;
+                  const isPeak = !isProj && pt.val === chartGeometry.maxRealVal;
+
+                  let formattedVal = '';
+                  if (chartMetric === 'cases') {
+                    formattedVal = `${pt.val} เคส`;
+                  } else {
+                    formattedVal = pt.val >= 1000000 
+                      ? `฿${(pt.val / 1000000).toFixed(1)}M` 
+                      : `฿${(pt.val / 1000).toFixed(0)}k`;
+                  }
+
+                  return (
+                    <g 
+                      key={`pt-${idx}`} 
+                      className="cursor-pointer transition-all"
+                      onClick={() => setSelectedYear(pt.yearData.yearBE.substring(0, 4))}
+                      onMouseEnter={() => setHoveredPoint(idx)}
+                      onMouseLeave={() => setHoveredPoint(null)}
                     >
-                      {chartMetric === 'cases'
-                        ? `${pt.val} เคส`
-                        : `฿${(pt.val / 1000).toFixed(0)}k`}
-                    </text>
+                      {/* Vertical indicator line when selected or hovered */}
+                      {(isSelected || isHovered) && (
+                        <line
+                          x1={pt.x}
+                          y1={chartGeometry.padTop - 10}
+                          x2={pt.x}
+                          y2={chartGeometry.baseLine}
+                          stroke={isProj ? '#f59e0b' : chartMetric === 'cases' ? '#2563eb' : chartMetric === 'labCost' ? '#059669' : '#4f46e5'}
+                          strokeWidth="1.5"
+                          strokeDasharray={isProj ? '4 4' : 'none'}
+                          opacity="0.6"
+                        />
+                      )}
 
-                    {/* Year Label below baseline */}
-                    <text
-                      x={pt.x}
-                      y="230"
-                      textAnchor="middle"
-                      className={`text-xs font-bold ${
-                        isSelected
-                          ? isProj ? 'fill-amber-600 dark:fill-amber-400' : 'fill-blue-600 dark:fill-blue-400 font-extrabold'
-                          : 'fill-zinc-500 dark:fill-zinc-400'
-                      }`}
-                    >
-                      {pt.yearData.yearBE}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
+                      {/* Outer Concentric Glow Circle */}
+                      <circle
+                        cx={pt.x}
+                        cy={pt.y}
+                        r={isSelected || isHovered ? "15" : "9"}
+                        className={
+                          isProj
+                            ? 'fill-amber-400/30'
+                            : chartMetric === 'cases'
+                            ? 'fill-blue-500/25'
+                            : chartMetric === 'labCost'
+                            ? 'fill-emerald-500/25'
+                            : 'fill-indigo-500/25'
+                        }
+                        style={{ transition: 'all 0.2s ease-out' }}
+                      />
+
+                      {/* Middle Ring */}
+                      <circle
+                        cx={pt.x}
+                        cy={pt.y}
+                        r={isSelected || isHovered ? "8" : "6"}
+                        className={
+                          isProj
+                            ? 'fill-amber-100 dark:fill-amber-900/60 stroke-amber-500'
+                            : chartMetric === 'cases'
+                            ? 'fill-blue-100 dark:fill-blue-900/60 stroke-blue-600'
+                            : chartMetric === 'labCost'
+                            ? 'fill-emerald-100 dark:fill-emerald-900/60 stroke-emerald-600'
+                            : 'fill-indigo-100 dark:fill-indigo-900/60 stroke-indigo-600'
+                        }
+                        strokeWidth="2"
+                      />
+
+                      {/* Center Core Circle */}
+                      <circle
+                        cx={pt.x}
+                        cy={pt.y}
+                        r={isSelected || isHovered ? "4" : "3.5"}
+                        className={
+                          isProj
+                            ? 'fill-amber-500 stroke-white dark:stroke-zinc-950'
+                            : chartMetric === 'cases'
+                            ? 'fill-blue-600 stroke-white dark:stroke-zinc-950'
+                            : chartMetric === 'labCost'
+                            ? 'fill-emerald-600 stroke-white dark:stroke-zinc-950'
+                            : 'fill-indigo-600 stroke-white dark:stroke-zinc-950'
+                        }
+                        strokeWidth="2"
+                      />
+
+                      {/* Floating Data Value Pill Badge */}
+                      <g 
+                        transform={`translate(${pt.x}, ${Math.max(pt.y - 36, 20)})`} 
+                        className="transition-all duration-200"
+                        filter="url(#badgeShadow)"
+                      >
+                        <rect
+                          x="-42"
+                          y="-13"
+                          width="84"
+                          height="26"
+                          rx="13"
+                          className={
+                            isSelected || isHovered
+                              ? isProj
+                                ? 'fill-amber-500 stroke-amber-400'
+                                : chartMetric === 'cases'
+                                ? 'fill-blue-600 stroke-blue-500'
+                                : chartMetric === 'labCost'
+                                ? 'fill-emerald-600 stroke-emerald-500'
+                                : 'fill-indigo-600 stroke-indigo-500'
+                              : 'fill-white dark:fill-zinc-800 stroke-zinc-200 dark:stroke-zinc-700'
+                          }
+                          strokeWidth="1.5"
+                        />
+                        <text
+                          x="0"
+                          y="4"
+                          textAnchor="middle"
+                          className={`text-[11px] font-black tracking-tight ${
+                            isSelected || isHovered
+                              ? 'fill-white'
+                              : isProj
+                              ? 'fill-amber-600 dark:fill-amber-400'
+                              : chartMetric === 'cases'
+                              ? 'fill-blue-600 dark:fill-blue-400'
+                              : chartMetric === 'labCost'
+                              ? 'fill-emerald-600 dark:fill-emerald-400'
+                              : 'fill-indigo-600 dark:fill-indigo-400'
+                          }`}
+                        >
+                          {formattedVal}
+                        </text>
+                      </g>
+
+                      {/* Peak Year Indicator Badge */}
+                      {isPeak && !isHovered && !isSelected && (
+                        <g transform={`translate(${pt.x}, ${Math.max(pt.y - 54, 4)})`}>
+                          <rect
+                            x="-32"
+                            y="-9"
+                            width="64"
+                            height="18"
+                            rx="9"
+                            className="fill-blue-50 dark:fill-blue-950/80 stroke-blue-200 dark:stroke-blue-800"
+                            strokeWidth="1"
+                          />
+                          <text
+                            x="0"
+                            y="4"
+                            textAnchor="middle"
+                            className="text-[9px] font-bold fill-blue-700 dark:fill-blue-300"
+                          >
+                            🏆 ปียอดสูงสุด
+                          </text>
+                        </g>
+                      )}
+
+                      {/* YoY Growth Badge when selected or hovered */}
+                      {(isSelected || isHovered) && pt.yearData.yoyCaseGrowth !== null && (
+                        <g transform={`translate(${pt.x}, ${Math.max(pt.y - 56, 4)})`}>
+                          <rect
+                            x="-36"
+                            y="-9"
+                            width="72"
+                            height="18"
+                            rx="9"
+                            className={
+                              pt.yearData.yoyCaseGrowth >= 0
+                                ? 'fill-emerald-500 text-white'
+                                : 'fill-rose-500 text-white'
+                            }
+                          />
+                          <text
+                            x="0"
+                            y="4"
+                            textAnchor="middle"
+                            className="text-[9px] font-bold fill-white"
+                          >
+                            {pt.yearData.yoyCaseGrowth >= 0 ? '▲ +' : '▼ '}
+                            {Math.abs(pt.yearData.yoyCaseGrowth).toFixed(0)}% YoY
+                          </text>
+                        </g>
+                      )}
+
+                      {/* Year Axis Label Pill below Baseline */}
+                      <g transform={`translate(${pt.x}, ${chartGeometry.baseLine + 18})`}>
+                        <rect
+                          x={isProj ? "-54" : "-32"}
+                          y="-12"
+                          width={isProj ? "108" : "64"}
+                          height="24"
+                          rx="12"
+                          className={
+                            isSelected
+                              ? isProj
+                                ? 'fill-amber-500 stroke-amber-400'
+                                : 'fill-blue-600 stroke-blue-500'
+                              : 'fill-zinc-100 dark:fill-zinc-800 stroke-transparent hover:stroke-zinc-300 dark:hover:stroke-zinc-700'
+                          }
+                          strokeWidth="1.5"
+                        />
+                        <text
+                          x="0"
+                          y="4"
+                          textAnchor="middle"
+                          className={`text-xs font-bold ${
+                            isSelected
+                              ? 'fill-white font-black'
+                              : isProj
+                              ? 'fill-amber-600 dark:fill-amber-400'
+                              : 'fill-zinc-600 dark:fill-zinc-400'
+                          }`}
+                        >
+                          {isProj ? '2570 (คาดการณ์)' : `พ.ศ. ${pt.yearData.yearBE}`}
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
           </div>
+        )}
+
+        {/* Interactive Year Quick Select Cards Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+          {yearlyData.map((y, idx) => {
+            const isSel = selectedYear.startsWith(y.yearBE.substring(0, 4));
+            const isProj = y.isProjected;
+            const isPeak = y.yearBE.startsWith('2567');
+            const percentOfTotal = summaryAll.totalCases > 0 ? (y.totalCases / summaryAll.totalCases) * 100 : 0;
+
+            return (
+              <button
+                key={y.yearBE}
+                onClick={() => setSelectedYear(y.yearBE.substring(0, 4))}
+                className={`p-3 rounded-2xl text-left transition-all relative border ${
+                  isSel
+                    ? isProj
+                      ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 shadow-sm ring-2 ring-amber-400/40'
+                      : 'bg-blue-50/80 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 shadow-sm ring-2 ring-blue-500/30'
+                    : 'bg-zinc-50/70 dark:bg-zinc-800/40 border-zinc-200/70 dark:border-zinc-800 hover:bg-white dark:hover:bg-zinc-800'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className={`text-xs font-bold ${
+                    isSel 
+                      ? isProj ? 'text-amber-700 dark:text-amber-300' : 'text-blue-700 dark:text-blue-300' 
+                      : 'text-zinc-700 dark:text-zinc-300'
+                  }`}>
+                    พ.ศ. {y.yearBE.substring(0, 4)}
+                  </span>
+                  {isProj ? (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-200/70 dark:bg-amber-900/80 text-amber-800 dark:text-amber-200 font-bold flex items-center">
+                      <Sparkles className="w-2.5 h-2.5 mr-0.5" /> AI
+                    </span>
+                  ) : isPeak ? (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 font-bold">
+                      สูงสุด
+                    </span>
+                  ) : y.yearBE.startsWith('2569') ? (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-bold">
+                      ล่าสุด
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-base font-black text-zinc-900 dark:text-zinc-100">
+                    {chartMetric === 'cases'
+                      ? `${y.totalCases} เคส`
+                      : chartMetric === 'labCost'
+                      ? `฿${(y.totalLabCost / 1000).toFixed(0)}k`
+                      : `฿${(y.netMargin / 1000).toFixed(0)}k`}
+                  </span>
+                  {y.yoyCaseGrowth !== null && (
+                    <span className={`text-[10px] font-bold ${y.yoyCaseGrowth >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      {y.yoyCaseGrowth >= 0 ? '↑' : '↓'}{Math.abs(y.yoyCaseGrowth).toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+
+                {/* Subtext info */}
+                <div className="text-[10px] text-zinc-400 mt-1 truncate">
+                  {isProj ? 'งบคาดการณ์ ฿234k' : `${percentOfTotal.toFixed(1)}% ของสะสม 4 ปี`}
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         {/* Selected Year Detail Showcase */}
