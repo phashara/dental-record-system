@@ -446,19 +446,21 @@ export default function App() {
         onOpenExcelImport={() => setIsExcelModalOpen(true)}
       />
 
-      {/* Excel / CSV Batch Import Modal (2566 - 2569) */}
-      <ExcelImportModal
-        isOpen={isExcelModalOpen}
-        onClose={() => setIsExcelModalOpen(false)}
-        existingRecords={records}
-        onImportSuccess={(savedCount) => {
-          const up = dentureStorage.getLocalRecords();
-          setRecords(up);
-          showToast(`✓ นำเข้าข้อมูลเวชระเบียน ${savedCount} รายการจากไฟล์ Excel สำเร็จ`);
-          dentureStorage.syncQueueWithFirestore().catch(() => {});
-          setCurrentTab('records');
-        }}
-      />
+      {/* Excel / CSV Batch Import Modal (2567 - 2569) */}
+      {isExcelModalOpen && (
+        <ExcelImportModal
+          isOpen={isExcelModalOpen}
+          onClose={() => setIsExcelModalOpen(false)}
+          existingRecords={records}
+          onImportSuccess={(savedCount) => {
+            const up = dentureStorage.getLocalRecords();
+            setRecords(up);
+            showToast(`✓ นำเข้าข้อมูลเวชระเบียน ${savedCount} รายการจากไฟล์ Excel สำเร็จ`);
+            dentureStorage.syncQueueWithFirestore().catch(() => {});
+            setCurrentTab('records');
+          }}
+        />
+      )}
 
       {/* iPhone Passcode Lock Screen (Passcode: 0723) */}
       <IPhoneLockScreen isLocked={isLocked} onUnlock={handleUnlock} />

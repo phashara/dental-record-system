@@ -392,3 +392,53 @@ export function maskHN(hn: string): string {
   }
   return clean;
 }
+
+/**
+ * Normalizes dates to standard ISO YYYY-MM-DD (CE year)
+ * Converts Thai Buddhist Era years (e.g. 2569 -> 2026, 2568 -> 2025, 2567 -> 2024, 2566 -> 2023)
+ */
+export function normalizeRecordDate(rawDate: string | undefined | null): string {
+  if (!rawDate) return '';
+  const clean = String(rawDate).trim();
+
+  // If already standard ISO YYYY-MM-DD or YYYY/MM/DD
+  const isoMatch = clean.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (isoMatch) {
+    let year = parseInt(isoMatch[1], 10);
+    const month = isoMatch[2].padStart(2, '0');
+    const day = isoMatch[3].padStart(2, '0');
+    if (year > 2400) {
+      year -= 543;
+    }
+    return `${year}-${month}-${day}`;
+  }
+
+  // If DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = clean.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    let year = parseInt(dmyMatch[3], 10);
+    if (year > 2400) {
+      year -= 543;
+    }
+    return `${year}-${month}-${day}`;
+  }
+
+  return clean;
+}
+
+/**
+ * Returns Buddhist Era (พ.ศ.) year string (e.g. "2026-08-25" -> "2569", "2569-08-28" -> "2569")
+ */
+export function getYearBE(dateStr: string | undefined | null): string {
+  if (!dateStr) return '';
+  const norm = normalizeRecordDate(dateStr);
+  const yearPart = parseInt(norm.slice(0, 4), 10);
+  if (isNaN(yearPart)) return '';
+  if (yearPart < 2400) {
+    return String(yearPart + 543);
+  }
+  return String(yearPart);
+}
+

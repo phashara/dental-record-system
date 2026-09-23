@@ -82,6 +82,14 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
     return list;
   }, [records, exportFilterMode, exportStartDate, exportEndDate, exportYear, exportMonth]);
 
+  // Count of Year 2566 (2023) records in current database
+  const records2566Count = useMemo(() => {
+    return records.filter(r => {
+      const d = r.date || '';
+      return d.startsWith('2023') || d.startsWith('2566') || d.includes('/2566') || d.includes('/2023');
+    }).length;
+  }, [records]);
+
   const filteredExportAmount = useMemo(() => {
     return filteredExportRecords.reduce((sum, r) => sum + (r.treatmentFee || r.labCost || 0), 0);
   }, [filteredExportRecords]);
@@ -789,7 +797,7 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
                       <span>นำเข้าจากไฟล์ Excel (.xlsx / .xls / .csv)</span>
                     </h4>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 font-bold">
-                      รองรับปี 2566 - 2569
+                      รองรับปี 2567 - 2569
                     </span>
                   </div>
                   <p className="text-xs text-emerald-800/80 dark:text-emerald-300 leading-relaxed">
@@ -844,6 +852,48 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
           {activeTab === 'reset' && (
             <div className="space-y-4">
               
+              {/* Purge Year 2566 Records */}
+              <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/20 border-2 border-amber-200 dark:border-amber-900/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-amber-800 dark:text-amber-300">
+                    <Trash2 className="w-5 h-5 flex-shrink-0" />
+                    <h4 className="text-xs font-bold">นำข้อมูลปี 2566 (2023) ออกจากระบบ</h4>
+                  </div>
+                  <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold ${
+                    records2566Count > 0 
+                      ? 'bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100 animate-pulse' 
+                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500'
+                  }`}>
+                    {records2566Count > 0 ? `พบในระบบ ${records2566Count} รายการ` : 'ไม่มีข้อมูลปี 66 ในระบบแล้ว'}
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800/80 dark:text-amber-300 leading-relaxed">
+                  ลบเฉพาะเวชระเบียนที่บันทึกในปี พ.ศ. 2566 (ค.ศ. 2023) ออกจากฐานข้อมูลและระบบอย่างสมบูรณ์ โดยคงข้อมูลปี 2567, 2568, 2569 ไว้อย่างปลอดภัย
+                </p>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    disabled={records2566Count === 0 || isProcessing}
+                    onClick={async () => {
+                      setIsProcessing(true);
+                      try {
+                        const deleted = await dentureStorage.deleteRecordsByYear(2566);
+                        onRecordsUpdated();
+                        setImportStatus(`✅ นำข้อมูลปี 2566 ออกจากระบบเรียบร้อยแล้วทั้งหมด ${deleted} รายการ`);
+                      } catch (e) {
+                        setImportStatus('❌ เกิดข้อผิดพลาดในการนำข้อมูลปี 2566 ออก');
+                      } finally {
+                        setIsProcessing(false);
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold disabled:opacity-40 transition-colors flex items-center space-x-1.5 shadow-xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>นำข้อมูลปี 2566 ออกทันที {records2566Count > 0 ? `(${records2566Count} รายการ)` : ''}</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Wipe for Real Production */}
               <div className="p-4 rounded-2xl bg-red-50/60 dark:bg-red-950/20 border-2 border-red-200 dark:border-red-900/50 space-y-3">
                 <div className="flex items-center space-x-2 text-red-600 dark:text-red-400">

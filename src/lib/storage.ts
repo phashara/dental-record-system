@@ -1,4 +1,4 @@
-import { DentureRecord, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName, EXPORT_COVERAGE_ORDER } from '../types';
+import { DentureRecord, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName, normalizeRecordDate, getYearBE, EXPORT_COVERAGE_ORDER } from '../types';
 import { thaiBahtText } from './bahtText';
 import { db, handleFirestoreError, OperationType } from './firebase';
 import {
@@ -130,11 +130,12 @@ export class DentureStorageService {
     return this.isOnlineStatus;
   }
 
-  // Normalizes coverage and doctor into clean standardized format (removes "ทพญ." etc.)
+  // Normalizes date, coverage and doctor into clean standardized format (removes "ทพญ." etc.)
   private normalizeRecordCoverage(r: DentureRecord): DentureRecord {
     const res = resolveCoverage(r.coverage || r.coverageGroup);
     return {
       ...r,
+      date: normalizeRecordDate(r.date) || r.date,
       doctor: normalizeDoctorName(r.doctor),
       coverageGroup: res.group,
       coverage: res.subItem,
@@ -418,6 +419,34 @@ export class DentureStorageService {
     }
   }
 
+  // Delete records by Thai Buddhist Era year (e.g. 2566) or AD year (2023)
+  public async deleteRecordsByYear(yearBE: number): Promise<number> {
+    const adYear = yearBE > 2400 ? yearBE - 543 : yearBE;
+    const beYearStr = String(yearBE > 2400 ? yearBE : yearBE + 543);
+    const adYearStr = String(adYear);
+    const shortBeYear = beYearStr.slice(-2); // e.g. "66"
+
+    const all = this.getLocalRecords();
+    const toDelete = all.filter(r => {
+      const d = r.date || '';
+      const dateMatch = d.startsWith(adYearStr) || d.startsWith(beYearStr) || d.includes(`/${yearBE}`) || d.includes(`/${adYear}`);
+      if (dateMatch) return true;
+
+      // Also check HN prefix if date is 2023 or empty
+      const hn = (r.hn || '').trim();
+      if ((!d || d.startsWith(adYearStr) || d.includes(adYearStr)) && (hn.startsWith(shortBeYear) && hn.length >= 6)) {
+        return true;
+      }
+      return false;
+    });
+
+    if (toDelete.length === 0) return 0;
+
+    const ids = toDelete.map(r => r.id);
+    await this.batchDeleteRecords(ids);
+    return ids.length;
+  }
+
   private removeFromOfflineQueue(ids: string[]) {
     try {
       const queueStr = localStorage.getItem(OFFLINE_QUEUE_KEY);
@@ -551,18 +580,21 @@ export class DentureStorageService {
     if (filterOpts.startDate && filterOpts.endDate) {
       records = records.filter(r => {
         if (!r.date) return false;
-        return r.date >= filterOpts.startDate! && r.date <= filterOpts.endDate!;
+        const norm = normalizeRecordDate(r.date);
+        return norm >= filterOpts.startDate! && norm <= filterOpts.endDate!;
       });
     } else if (filterOpts.year && filterOpts.year !== 'all') {
-      const bYear = parseInt(filterOpts.year, 10);
-      const cYear = bYear > 2500 ? bYear - 543 : bYear;
-      records = records.filter(r => r.date && r.date.startsWith(String(cYear)));
+      const targetBeYear = filterOpts.year.length === 4 && parseInt(filterOpts.year, 10) < 2400
+        ? String(parseInt(filterOpts.year, 10) + 543)
+        : filterOpts.year;
+      records = records.filter(r => getYearBE(r.date) === targetBeYear);
     }
 
     if (filterOpts.month && filterOpts.month !== 'all') {
       records = records.filter(r => {
         if (!r.date) return false;
-        const parts = r.date.split('-');
+        const norm = normalizeRecordDate(r.date);
+        const parts = norm.split('-');
         return parts[1] === filterOpts.month;
       });
     }

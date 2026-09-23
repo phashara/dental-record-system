@@ -14,7 +14,7 @@ import {
   RotateCcw,
   FileText
 } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName } from '../types';
+import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName, normalizeRecordDate, getYearBE } from '../types';
 
 interface DashboardViewProps {
   records: DentureRecord[];
@@ -43,23 +43,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const filteredRecords = useMemo(() => {
     return records.filter(r => {
       if (!r.date) return true;
-      const recDate = r.date.slice(0, 10);
+      const normDate = normalizeRecordDate(r.date);
+      const beYear = getYearBE(r.date);
 
       if (timeFilter === '2566') {
-        if (!recDate.startsWith('2023')) return false;
+        if (beYear !== '2566') return false;
       } else if (timeFilter === '2567') {
-        if (!recDate.startsWith('2024')) return false;
+        if (beYear !== '2567') return false;
       } else if (timeFilter === '2568') {
-        if (!recDate.startsWith('2025')) return false;
+        if (beYear !== '2568') return false;
       } else if (timeFilter === '2569') {
-        if (!recDate.startsWith('2026')) return false;
+        if (beYear !== '2569') return false;
       } else if (timeFilter === 'custom') {
-        if (startDate && recDate < startDate) return false;
-        if (endDate && recDate > endDate) return false;
+        if (startDate && normDate < startDate) return false;
+        if (endDate && normDate > endDate) return false;
       }
 
       if (selectedMonth !== 'all') {
-        const parts = recDate.split('-');
+        const parts = normDate.split('-');
         if (parts[1] !== selectedMonth) return false;
       }
 
@@ -85,21 +86,63 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     typeCounts[t] = (typeCounts[t] || 0) + 1;
   });
 
-  // Doctor breakdown (5 doctors specified)
-  const doctorStats = DOCTORS_LIST.map(doc => {
-    const docRecords = filteredRecords.filter(r => normalizeDoctorName(r.doctor) === doc.name || r.doctor?.includes(doc.name));
-    const count = docRecords.length;
-    const labSum = docRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
-    const feeSum = docRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
-    return {
-      ...doc,
-      count,
-      labSum,
-      feeSum,
-      percentage: totalPatients > 0 ? Math.round((count / totalPatients) * 100) : 0,
-      recentCases: docRecords.slice(0, 3)
-    };
-  }).sort((a, b) => b.count - a.count);
+  // Dynamic Doctor breakdown: automatically adapts to the selected year & dataset
+  const doctorStats = useMemo(() => {
+    const currentDocMap = new Map<string, typeof DOCTORS_LIST[number]>(
+      DOCTORS_LIST.map(d => [d.name as string, d])
+    );
+    const extraColors = [
+      'bg-indigo-600',
+      'bg-purple-600',
+      'bg-cyan-600',
+      'bg-rose-600',
+      'bg-amber-600',
+      'bg-emerald-700'
+    ];
+
+    const activeDocNames = new Set<string>();
+    filteredRecords.forEach(r => {
+      const clean = normalizeDoctorName(r.doctor);
+      if (clean) activeDocNames.add(clean);
+    });
+
+    // If 'all' or '2569' (current year), always ensure current 5 doctors are present
+    if (timeFilter === 'all' || timeFilter === '2569') {
+      DOCTORS_LIST.forEach(d => activeDocNames.add(d.name));
+    }
+
+    let extraColorIdx = 0;
+    const list = Array.from(activeDocNames).map(docName => {
+      const current = currentDocMap.get(docName);
+      const docRecords = filteredRecords.filter(
+        r => normalizeDoctorName(r.doctor) === docName || r.doctor?.includes(docName)
+      );
+      const count = docRecords.length;
+      const labSum = docRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
+      const feeSum = docRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
+      const color = current ? current.color : extraColors[extraColorIdx++ % extraColors.length];
+
+      return {
+        name: docName,
+        fullName: current ? current.fullName : `ทพ./ทพญ. ${docName}`,
+        color,
+        isCurrent: !!current,
+        count,
+        labSum,
+        feeSum,
+        percentage: totalPatients > 0 ? Math.round((count / totalPatients) * 100) : 0,
+        recentCases: docRecords.slice(0, 3)
+      };
+    });
+
+    list.sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1;
+      return a.name.localeCompare(b.name, 'th');
+    });
+
+    return list;
+  }, [filteredRecords, totalPatients, timeFilter]);
 
   // Coverage Breakdown
   const coverageStats = COVERAGE_CATEGORIES.map(cat => {
@@ -420,25 +463,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
           <div>
             <div className="text-2xl sm:text-3xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">
-              5 ท่าน
+              {doctorStats.filter(d => d.count > 0).length || doctorStats.length} ท่าน
             </div>
-            <p className="text-[11px] text-zinc-400 mt-1">
-              ชิดชนก, วีรยา, จิณณพัต, กนกวรรณ, ศศิมนต์
+            <p className="text-[11px] text-zinc-400 mt-1 truncate">
+              {doctorStats.filter(d => d.count > 0).map(d => d.name).join(', ') || 'ไม่มีข้อมูลในตัวกรองนี้'}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Dentists Workload Section (5 Doctors) */}
+      {/* Dentists Workload Section (Dynamic) */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center space-x-2">
-            <span>ภาระงานทันตแพทย์ 5 ท่าน</span>
+            <span>ภาระงานทันตแพทย์ ({doctorStats.length} ท่าน)</span>
             <span className="text-xs text-zinc-400 font-normal">(กดเพื่อกรองดูประวัติเฉพาะท่านได้)</span>
           </h3>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {doctorStats.map(doc => (
             <div
               key={doc.name}
@@ -446,13 +489,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="cursor-pointer group p-4 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 hover:border-blue-500 dark:hover:border-blue-500 transition-all duration-150 shadow-xs hover:shadow-md"
             >
               <div className="flex items-center space-x-2.5 mb-2">
-                <div className={`w-8 h-8 rounded-xl ${doc.color} text-white flex items-center justify-center text-xs font-bold shadow-xs`}>
+                <div className={`w-8 h-8 rounded-xl ${doc.color} text-white flex items-center justify-center text-xs font-bold shadow-xs shrink-0`}>
                   {doc.name.charAt(0)}
                 </div>
-                <div className="overflow-hidden">
-                  <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                    {doc.name}
-                  </h4>
+                <div className="overflow-hidden flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      {doc.name}
+                    </h4>
+                    {!doc.isCurrent && (
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-medium">
+                        อดีต
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[10px] text-zinc-400 truncate">
                     {doc.fullName}
                   </p>
@@ -476,7 +526,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <div className="mt-2.5 w-full bg-zinc-100 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full ${doc.color}`}
-                  style={{ width: `${Math.max(doc.percentage, 8)}%` }}
+                  style={{ width: `${Math.max(doc.percentage, doc.count > 0 ? 8 : 0)}%` }}
                 />
               </div>
             </div>

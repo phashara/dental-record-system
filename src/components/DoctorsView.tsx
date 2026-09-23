@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Stethoscope, DollarSign, Users, Award, ChevronRight, FileText } from 'lucide-react';
-import { DentureRecord, DOCTORS_LIST, maskPatientName, maskHN, normalizeDoctorName } from '../types';
+import React, { useState, useMemo } from 'react';
+import { Stethoscope, DollarSign, Users, Award, ChevronRight, FileText, Calendar } from 'lucide-react';
+import { DentureRecord, DOCTORS_LIST, maskPatientName, maskHN, normalizeDoctorName, getYearBE } from '../types';
 
 interface DoctorsViewProps {
   records: DentureRecord[];
@@ -15,48 +15,60 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
   onFilterDoctorInTable,
   isPdpaMode = false,
 }) => {
+  const [yearFilter, setYearFilter] = useState<'all' | '2566' | '2567' | '2568' | '2569'>('all');
   const [selectedDoctor, setSelectedDoctor] = useState<string>(DOCTORS_LIST[0]?.name || 'กนกวรรณ');
 
-  // Compute stats for all 5 current doctors
-  const doctorsData = DOCTORS_LIST.map(doc => {
-    const docRecords = records.filter(r => normalizeDoctorName(r.doctor) === doc.name || r.doctor?.includes(doc.name));
-    const totalCases = docRecords.length;
-    const totalLab = docRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
-    const totalFee = docRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
-
-    // Procedure distribution
-    const types: Record<string, number> = {};
-    docRecords.forEach(r => {
-      const t = r.dentureType || 'อื่นๆ';
-      types[t] = (types[t] || 0) + 1;
+  // Filter records by selected year
+  const filteredRecords = useMemo(() => {
+    if (yearFilter === 'all') return records;
+    return records.filter(r => {
+      const beYear = getYearBE(r.date);
+      return beYear === yearFilter;
     });
+  }, [records, yearFilter]);
 
-    return {
-      ...doc,
-      isHistorical: false,
-      totalCases,
-      totalLab,
-      totalFee,
-      avgLab: totalCases > 0 ? totalLab / totalCases : 0,
-      types,
-      records: docRecords,
-    };
-  });
+  // Compute stats for all 5 current doctors
+  const doctorsData = useMemo(() => {
+    return DOCTORS_LIST.map(doc => {
+      const docRecords = filteredRecords.filter(r => normalizeDoctorName(r.doctor) === doc.name || r.doctor?.includes(doc.name));
+      const totalCases = docRecords.length;
+      const totalLab = docRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
+      const totalFee = docRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
+
+      // Procedure distribution
+      const types: Record<string, number> = {};
+      docRecords.forEach(r => {
+        const t = r.dentureType || 'อื่นๆ';
+        types[t] = (types[t] || 0) + 1;
+      });
+
+      return {
+        ...doc,
+        isHistorical: false,
+        totalCases,
+        totalLab,
+        totalFee,
+        avgLab: totalCases > 0 ? totalLab / totalCases : 0,
+        types,
+        records: docRecords,
+      };
+    });
+  }, [filteredRecords]);
 
   // Compute stats for historical doctors from legacy records (e.g. 2566 - 2569)
-  const historicalDoctorsData = React.useMemo(() => {
+  const historicalDoctorsData = useMemo(() => {
     const activeNames = new Set<string>(DOCTORS_LIST.map(d => d.name));
     const historyDocNames = new Set<string>();
-    records.forEach(r => {
+    filteredRecords.forEach(r => {
       const clean = normalizeDoctorName(r.doctor);
       if (clean && !activeNames.has(clean)) {
         historyDocNames.add(clean);
       }
     });
 
-    const palette = ['bg-slate-600', 'bg-zinc-600', 'bg-stone-600', 'bg-teal-700', 'bg-indigo-700'];
+    const palette = ['bg-indigo-600', 'bg-rose-600', 'bg-teal-700', 'bg-purple-700', 'bg-stone-600'];
     return Array.from(historyDocNames).sort().map((docName, idx) => {
-      const docRecords = records.filter(r => normalizeDoctorName(r.doctor) === docName || r.doctor?.includes(docName));
+      const docRecords = filteredRecords.filter(r => normalizeDoctorName(r.doctor) === docName || r.doctor?.includes(docName));
       const totalCases = docRecords.length;
       const totalLab = docRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
       const totalFee = docRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
@@ -79,10 +91,15 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
         records: docRecords,
       };
     });
-  }, [records]);
+  }, [filteredRecords]);
 
-  const allDoctors = [...doctorsData, ...historicalDoctorsData];
-  const activeDocData = allDoctors.find(d => d.name === selectedDoctor) || allDoctors[0];
+  const allDoctors = useMemo(() => {
+    return [...doctorsData, ...historicalDoctorsData];
+  }, [doctorsData, historicalDoctorsData]);
+
+  const activeDocData = useMemo(() => {
+    return allDoctors.find(d => d.name === selectedDoctor) || allDoctors[0];
+  }, [allDoctors, selectedDoctor]);
 
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-150">
@@ -93,11 +110,37 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({
           <div>
             <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50 flex items-center space-x-2">
               <Stethoscope className="w-5 h-5 text-blue-600" />
-              <span>ทันตแพทย์ประจำคลินิกฟันปลอม (5 ท่าน)</span>
+              <span>ทันตแพทย์คลินิกฟันปลอม ({allDoctors.length} ท่าน)</span>
+              {yearFilter !== 'all' && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-mono font-bold">
+                  ประจำปี พ.ศ. {yearFilter}
+                </span>
+              )}
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
               โรงพยาบาลพยุหะคีรี • สรุปภาระงาน หัตถการฟันปลอม และสถิติค่าใช้จ่าย LAB แต่ละท่าน
             </p>
+          </div>
+
+          {/* Year Filter Buttons */}
+          <div className="flex items-center space-x-1.5 bg-zinc-100 dark:bg-zinc-800 p-1 rounded-2xl self-start sm:self-auto">
+            <span className="text-[11px] font-bold text-zinc-400 pl-2 pr-1 flex items-center space-x-1">
+              <Calendar className="w-3.5 h-3.5" />
+              <span>ปี:</span>
+            </span>
+            {(['all', '2569', '2568', '2567', '2566'] as const).map(yr => (
+              <button
+                key={yr}
+                onClick={() => setYearFilter(yr)}
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all ${
+                  yearFilter === yr
+                    ? 'bg-white dark:bg-zinc-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                    : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+                }`}
+              >
+                {yr === 'all' ? 'ทุกปี' : yr}
+              </button>
+            ))}
           </div>
         </div>
 

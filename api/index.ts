@@ -108,6 +108,34 @@ function normalizeDoctor(raw: string | undefined | null): string {
   return clean.replace(/^(ทพญ\.|ทพ\.|ทญ\.|หมอ|ทันตแพทย์หญิง|ทันตแพทย์)\s*/g, '').trim();
 }
 
+// Normalizes date string into ISO YYYY-MM-DD
+function normalizeDateIso(raw: string | undefined): string {
+  if (!raw) return new Date().toISOString().split('T')[0];
+  const clean = raw.trim();
+  const isoMatch = clean.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (isoMatch) {
+    let yr = parseInt(isoMatch[1], 10);
+    const m = isoMatch[2].padStart(2, '0');
+    const d = isoMatch[3].padStart(2, '0');
+    if (yr > 2400) yr -= 543;
+    return `${yr}-${m}-${d}`;
+  }
+  const dmyMatch = clean.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, '0');
+    const m = dmyMatch[2].padStart(2, '0');
+    let yr = parseInt(dmyMatch[3], 10);
+    if (yr < 100) {
+      if (yr >= 60 && yr <= 80) yr += 2500 - 543;
+      else yr += 2000;
+    } else if (yr > 2400) {
+      yr -= 543;
+    }
+    return `${yr}-${m}-${d}`;
+  }
+  return clean;
+}
+
 // Helper to get or seed DB
 function getRecords() {
   try {
@@ -119,6 +147,7 @@ function getRecords() {
         const norm = normalizeCoverage(r.coverage);
         return {
           ...r,
+          date: normalizeDateIso(r.date),
           doctor: normalizeDoctor(r.doctor),
           coverageGroup: r.coverageGroup || norm.group,
           coverage: norm.subItem,
@@ -167,7 +196,7 @@ app.post('/api/records', (req, res) => {
     patientName: req.body.patientName || '',
     age: req.body.age || '',
     gender: req.body.gender || 'ไม่ระบุ',
-    date: req.body.date || new Date().toISOString().split('T')[0],
+    date: normalizeDateIso(req.body.date),
     doctor: normalizeDoctor(req.body.doctor),
     dentureType: req.body.dentureType || 'CD',
     denturePosition: req.body.denturePosition || 'บนและล่าง',
@@ -196,6 +225,9 @@ app.post('/api/records/batch', (req, res) => {
     if (!item.id) {
       item.id = `rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     }
+    if (item.date) {
+      item.date = normalizeDateIso(item.date);
+    }
     if (item.doctor) {
       item.doctor = normalizeDoctor(item.doctor);
     }
@@ -220,6 +252,9 @@ app.put('/api/records/:id', (req, res) => {
   }
 
   const updatedFields = { ...req.body };
+  if (updatedFields.date) {
+    updatedFields.date = normalizeDateIso(updatedFields.date);
+  }
   if (updatedFields.doctor) {
     updatedFields.doctor = normalizeDoctor(updatedFields.doctor);
   }

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import {
   X,
@@ -17,7 +17,13 @@ import {
   DollarSign,
   ArrowRight,
   RefreshCw,
-  Info
+  Info,
+  Trash2,
+  ShieldCheck,
+  ClipboardCopy,
+  Sparkles,
+  FileText,
+  Clock
 } from 'lucide-react';
 import {
   DentureRecord,
@@ -27,6 +33,7 @@ import {
   classifyDentureType
 } from '../types';
 import { dentureStorage } from '../lib/storage';
+import { parseMatrixData, MatrixParseResult } from '../lib/matrixParser';
 
 interface ExcelImportModalProps {
   isOpen: boolean;
@@ -58,14 +65,12 @@ interface ColumnMapping {
 function parseExcelDate(raw: any): string {
   if (!raw) return new Date().toISOString().split('T')[0];
 
-  // If already Date object
   if (raw instanceof Date) {
     if (!isNaN(raw.getTime())) {
       return raw.toISOString().split('T')[0];
     }
   }
 
-  // If number (Excel serial date number, e.g. 45180)
   if (typeof raw === 'number') {
     try {
       const parsed = XLSX.SSF.parse_date_code(raw);
@@ -75,9 +80,7 @@ function parseExcelDate(raw: any): string {
         const d = String(parsed.d).padStart(2, '0');
         return `${y}-${m}-${d}`;
       }
-    } catch (e) {
-      // Fallback
-    }
+    } catch (e) {}
   }
 
   const str = String(raw).trim();
@@ -85,7 +88,6 @@ function parseExcelDate(raw: any): string {
   // If format is YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
     const [y, m, d] = str.split('-').map(Number);
-    // If Buddhist Era (e.g. 2566, 2567, 2568, 2569)
     const adYear = y > 2400 ? y - 543 : y;
     return `${adYear}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
@@ -98,54 +100,16 @@ function parseExcelDate(raw: any): string {
     let year = parseInt(slashMatch[3], 10);
 
     if (year < 100) {
-      // e.g. 66 -> 2566 -> 2023, 67 -> 2567 -> 2024
       if (year >= 60 && year <= 80) {
-        year += 2500 - 543; // BE to AD
+        year += 2500 - 543;
       } else {
         year += 2000;
       }
     } else if (year > 2400) {
-      // Buddhist Era e.g. 2566 -> 2023
       year -= 543;
     }
 
     return `${year}-${month}-${day}`;
-  }
-
-  // Thai month names fallback (e.g. "20 ก.ย. 2567" or "15 มกราคม 2566")
-  const thaiMonths: Record<string, string> = {
-    'ม.ค.': '01', 'มกราคม': '01',
-    'ก.พ.': '02', 'กุมภาพันธ์': '02',
-    'มี.ค.': '03', 'มีนาคม': '03',
-    'เม.ย.': '04', 'เมษายน': '04',
-    'พ.ค.': '05', 'พฤษภาคม': '05',
-    'มิ.ย.': '06', 'มิถุนายน': '06',
-    'ก.ค.': '07', 'กรกฎาคม': '07',
-    'ส.ค.': '08', 'สิงหาคม': '08',
-    'ก.ย.': '09', 'กันยายน': '09',
-    'ต.ค.': '10', 'ตุลาคม': '10',
-    'พ.ย.': '11', 'พฤศจิกายน': '11',
-    'ธ.ค.': '12', 'ธันวาคม': '12'
-  };
-
-  for (const [tName, mCode] of Object.entries(thaiMonths)) {
-    if (str.includes(tName)) {
-      const parts = str.split(/\s+/);
-      const day = parts.find(p => /^\d{1,2}$/.test(p));
-      const yearPart = parts.find(p => /^\d{2,4}$/.test(p));
-      if (day && yearPart) {
-        let yr = parseInt(yearPart, 10);
-        if (yr < 100) yr += 2500 - 543;
-        else if (yr > 2400) yr -= 543;
-        return `${yr}-${mCode}-${day.padStart(2, '0')}`;
-      }
-    }
-  }
-
-  // Try standard Date parsing
-  const d = new Date(str);
-  if (!isNaN(d.getTime())) {
-    return d.toISOString().split('T')[0];
   }
 
   return new Date().toISOString().split('T')[0];
@@ -158,11 +122,21 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   onImportSuccess
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Tab Mode: 'file' | 'paste'
+  const [activeTab, setActiveTab] = useState<'file' | 'paste'>('paste');
+  const [pastedText, setPastedText] = useState<string>('');
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>('all');
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
+  
+  // Matrix format state
+  const [matrixResult, setMatrixResult] = useState<MatrixParseResult | null>(null);
+  const [selectedMatrixMonth, setSelectedMatrixMonth] = useState<string>('all');
+
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>({
     hn: '',
     patientName: '',
@@ -185,8 +159,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
-  if (!isOpen) return null;
-
   // Auto-detect matching column from header name
   const autoDetectColumn = (headers: string[], keywords: string[]): string => {
     for (const kw of keywords) {
@@ -194,6 +166,41 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       if (found) return found;
     }
     return '';
+  };
+
+  // Process text change in paste tab
+  const handlePastedTextChange = (text: string) => {
+    setPastedText(text);
+    setErrorMsg(null);
+    setStatusMsg(null);
+
+    if (!text.trim()) {
+      setMatrixResult(null);
+      setRawRows([]);
+      return;
+    }
+
+    // Try parsing as matrix first
+    const matrix = parseMatrixData(text);
+    if (matrix.isMatrix && matrix.totalFound > 0) {
+      setMatrixResult(matrix);
+      // If there are months, default to first month or all
+      if (matrix.monthList.length > 0) {
+        setSelectedMatrixMonth(matrix.monthList[0].key);
+      } else {
+        setSelectedMatrixMonth('all');
+      }
+      setRawRows([]);
+    } else {
+      setMatrixResult(null);
+      // Fallback: parse CSV/TSV table
+      try {
+        const wb = XLSX.read(text, { type: 'string' });
+        extractRowsFromWorkbook(wb, wb.SheetNames[0]);
+      } catch (e) {
+        // Simple line parser
+      }
+    }
   };
 
   // Handle file select
@@ -211,13 +218,25 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         setWorkbook(wb);
         setSheetNames(wb.SheetNames);
 
-        // Load first sheet or all
-        const firstSheetName = wb.SheetNames[0];
-        const initialSheet = wb.SheetNames.length === 1 ? firstSheetName : 'all';
-        setSelectedSheet(initialSheet);
+        // Check if first sheet is matrix format
+        const firstSheet = wb.Sheets[wb.SheetNames[0]];
+        const sheet2D: any[][] = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+        const matrix = parseMatrixData(sheet2D);
 
-        // Parse rows from sheet(s)
-        extractRowsFromWorkbook(wb, initialSheet);
+        if (matrix.isMatrix && matrix.totalFound > 0) {
+          setMatrixResult(matrix);
+          if (matrix.monthList.length > 0) {
+            setSelectedMatrixMonth(matrix.monthList[0].key);
+          } else {
+            setSelectedMatrixMonth('all');
+          }
+          setRawRows([]);
+        } else {
+          setMatrixResult(null);
+          const initialSheet = wb.SheetNames.length === 1 ? wb.SheetNames[0] : 'all';
+          setSelectedSheet(initialSheet);
+          extractRowsFromWorkbook(wb, initialSheet);
+        }
       } catch (err: any) {
         console.error('Error reading Excel file:', err);
         setErrorMsg('ไม่สามารถเปิดไฟล์ Excel ได้ กรุณาตรวจสอบว่าเป็นไฟล์ .xlsx, .xls หรือ .csv ที่ถูกต้อง');
@@ -243,7 +262,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       const ws = wb.Sheets[sName];
       if (!ws) continue;
       const json: any[] = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
-      // Add sheet name indicator for debugging / verification
       json.forEach(r => {
         rows.push({ ...r, _sheetSource: sName });
       });
@@ -256,7 +274,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       return;
     }
 
-    // Get all unique column names
     const headersSet = new Set<string>();
     rows.forEach(r => {
       Object.keys(r).forEach(k => {
@@ -268,21 +285,20 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     const headers = Array.from(headersSet);
     setAvailableColumns(headers);
 
-    // Auto-map headers with intelligent Thai aliases
     const detected: ColumnMapping = {
       hn: autoDetectColumn(headers, ['hn', 'เลขประจำตัว', 'เวชระเบียน', 'เลขที่', 'id']),
       patientName: autoDetectColumn(headers, ['ชื่อ-สกุล', 'ชื่อ - สกุล', 'ชื่อผู้ป่วย', 'ชื่อคนไข้', 'ชื่อ', 'ผู้ป่วย', 'name', 'patient']),
-      date: autoDetectColumn(headers, ['วันที่', 'วันส่ง', 'วันรับ', 'วันนัด', 'date', 'ส่งแลป', 'วันที่พิมพ์']),
-      dentureType: autoDetectColumn(headers, ['ชนิดฟัน', 'ประเภทฟัน', 'ชนิดฟันเทียม', 'ชนิด', 'ประเภท', 'ฟันเทียม', 'ฟันปลอม', 'type', 'รายการ']),
+      date: autoDetectColumn(headers, ['วันที่', 'วันส่ง', 'วันรับ', 'วันนัด', 'date', 'ส่งแลป', 'วันที่พิมพ์', 'วันที่ insert']),
+      dentureType: autoDetectColumn(headers, ['ชนิดฟัน', 'ประเภทฟัน', 'ชนิดฟันเทียม', 'ชนิด', 'ประเภท', 'ฟันเทียม', 'ฟันปลอม', 'type', 'ให้บริการ']),
       denturePosition: autoDetectColumn(headers, ['ตำแหน่ง', 'ขากรรไกร', 'ชิ้น', 'บน/ล่าง', 'position']),
       coverage: autoDetectColumn(headers, ['สิทธิการรักษา', 'สิทธิ', 'สิทธิ์', 'ประเภทสิทธิ', 'coverage', 'scheme']),
       doctor: autoDetectColumn(headers, ['ทันตแพทย์', 'ชื่อหมอ', 'หมอ', 'ทพ', 'ทพญ', 'ผู้รักษา', 'doctor', 'dentist']),
-      labCost: autoDetectColumn(headers, ['ค่าแลป', 'ค่าแล็ป', 'แลป', 'lab', 'ราคาแลป', 'cost']),
+      labCost: autoDetectColumn(headers, ['ค่าแลป', 'ค่าแล็ป', 'แลป', 'lab', 'ราคาแลป', 'cost', 'หมายเหตุ']),
       treatmentFee: autoDetectColumn(headers, ['ค่ารักษา', 'รวม', 'ค่าบริการ', 'ราคา', 'มูลค่า', 'fee', 'price', 'amount']),
       age: autoDetectColumn(headers, ['อายุ', 'age']),
       gender: autoDetectColumn(headers, ['เพศ', 'gender', 'sex']),
       status: autoDetectColumn(headers, ['สถานะ', 'status', 'ขั้นตอน']),
-      note: autoDetectColumn(headers, ['หมายเหตุ', 'note', 'remark', 'ลายมือ'])
+      note: autoDetectColumn(headers, ['หมายเหตุ', 'note', 'remark'])
     };
 
     setColumnMapping(detected);
@@ -296,8 +312,16 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     }
   };
 
-  // Convert raw rows to DentureRecord candidates
+  // Convert raw rows or matrix to DentureRecord candidates
   const parsedRecords = useMemo(() => {
+    // If matrix format is active
+    if (matrixResult && matrixResult.isMatrix) {
+      if (selectedMatrixMonth === 'all') {
+        return matrixResult.allRecords;
+      }
+      return matrixResult.months[selectedMatrixMonth] || [];
+    }
+
     if (rawRows.length === 0) return [];
 
     const list: DentureRecord[] = [];
@@ -305,7 +329,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     for (let i = 0; i < rawRows.length; i++) {
       const row = rawRows[i];
 
-      // Extract values using mapping
       const rawHn = columnMapping.hn ? String(row[columnMapping.hn] || '').trim() : '';
       const rawName = columnMapping.patientName ? String(row[columnMapping.patientName] || '').trim() : '';
       const rawDate = columnMapping.date ? row[columnMapping.date] : '';
@@ -320,15 +343,13 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       const rawStatus = columnMapping.status ? String(row[columnMapping.status] || '').trim() : 'เสร็จสิ้น (Completed)';
       const rawNote = columnMapping.note ? String(row[columnMapping.note] || '').trim() : '';
 
-      // Skip completely empty rows
       if (!rawHn && !rawName) continue;
 
       const dateIso = parseExcelDate(rawDate);
       const cleanDoctor = normalizeDoctorName(rawDoctor);
-      const resolvedCov = resolveCoverage(rawCoverage);
+      const cov = resolveCoverage(rawCoverage);
       const classified = classifyDentureType(rawType);
 
-      // Parse numerical amounts safely
       const numLabCost = Math.max(0, parseFloat(String(rawLabCost).replace(/[^0-9.-]/g, '')) || 0);
       const numFee = Math.max(0, parseFloat(String(rawFee).replace(/[^0-9.-]/g, '')) || numLabCost);
 
@@ -340,14 +361,15 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         gender: rawGender === 'ชาย' ? 'ชาย' : rawGender === 'หญิง' ? 'หญิง' : 'ไม่ระบุ',
         date: dateIso,
         doctor: cleanDoctor,
-        dentureType: rawType || classified.code || 'CD',
-        denturePosition: rawPosition || classified.positionDesc || 'บนและล่าง',
-        coverage: resolvedCov.subItem,
-        coverageGroup: resolvedCov.group,
+        dentureType: classified.code,
+        denturePosition: rawPosition || classified.positionDesc,
+        coverage: cov.fullDisplay,
+        coverageGroup: cov.group,
         labCost: numLabCost,
         treatmentFee: numFee,
-        note: rawNote ? `${rawNote} [นำเข้าจาก Excel Sheet: ${row._sheetSource || ''}]` : `นำเข้าจาก Excel Sheet: ${row._sheetSource || ''}`,
-        status: (rawStatus.includes('รอดำเนินการ') ? 'รอดำเนินการ' : rawStatus.includes('ส่งแลป') ? 'ส่งแลป' : 'เสร็จสิ้น (Completed)') as any,
+        diagnosis: 'K081 Loss of teeth due to accident, extraction or local periodontal disease',
+        status: (rawStatus as any) || 'เสร็จสิ้น (Completed)',
+        note: rawNote,
         source: `Excel Import (${row._sheetSource || 'Sheet1'})`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -358,7 +380,60 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     }
 
     return list;
-  }, [rawRows, columnMapping]);
+  }, [rawRows, columnMapping, matrixResult, selectedMatrixMonth]);
+
+  // Existing records breakdown by year
+  const existingBreakdown = useMemo(() => {
+    let count2569 = 0;
+    let count2568 = 0;
+    let count2567 = 0;
+    let count2566 = 0;
+    let countOther = 0;
+
+    existingRecords.forEach(r => {
+      const d = r.date || '';
+      if (d.startsWith('2026') || d.startsWith('2569')) {
+        count2569++;
+      } else if (d.startsWith('2025') || d.startsWith('2568')) {
+        count2568++;
+      } else if (d.startsWith('2024') || d.startsWith('2567')) {
+        count2567++;
+      } else if (d.startsWith('2023') || d.startsWith('2566')) {
+        count2566++;
+      } else {
+        countOther++;
+      }
+    });
+
+    return {
+      total: existingRecords.length,
+      count2569,
+      count2568,
+      count2567,
+      count2566,
+      countOther
+    };
+  }, [existingRecords]);
+
+  // Download backup before importing
+  const handleDownloadBackupBeforeImport = () => {
+    try {
+      const dataStr = JSON.stringify(existingRecords, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const dateStr = new Date().toISOString().split('T')[0];
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `backup_before_excel_import_${dateStr}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setStatusMsg('✅ ดาวน์โหลดไฟล์สำรองข้อมูล JSON เรียบร้อยแล้ว');
+    } catch (e) {
+      setErrorMsg('เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์สำรอง');
+    }
+  };
 
   // Statistics & Breakdown of parsed data
   const stats = useMemo(() => {
@@ -367,6 +442,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     const doctorCounts: Record<string, number> = {};
     const coverageCounts: Record<string, number> = {};
     let totalLab = 0;
+    let totalFee = 0;
 
     const existingHnDateSet = new Set(
       existingRecords.map(r => `${r.hn.trim().toLowerCase()}_${r.date || ''}`)
@@ -375,24 +451,20 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     let duplicateCount = 0;
 
     parsedRecords.forEach(r => {
-      // Year calculation
       const yStr = r.date ? r.date.split('-')[0] : '';
       const bYear = yStr ? parseInt(yStr, 10) + 543 : 0;
       const yKey = bYear > 0 ? `พ.ศ. ${bYear}` : 'ไม่ระบุปี';
       yearCounts[yKey] = (yearCounts[yKey] || 0) + 1;
 
-      // Doctor
       const doc = r.doctor || 'ไม่ระบุ';
       doctorCounts[doc] = (doctorCounts[doc] || 0) + 1;
 
-      // Coverage
       const cov = r.coverageGroup || 'อื่นๆ';
       coverageCounts[cov] = (coverageCounts[cov] || 0) + 1;
 
-      // Lab Cost
       totalLab += r.labCost || 0;
+      totalFee += r.treatmentFee || 0;
 
-      // Duplicate detection
       const key = `${r.hn.trim().toLowerCase()}_${r.date || ''}`;
       if (existingHnDateSet.has(key)) {
         duplicateCount++;
@@ -405,9 +477,12 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       doctorCounts,
       coverageCounts,
       totalLab,
+      totalFee,
       duplicateCount
     };
   }, [parsedRecords, existingRecords]);
+
+  if (!isOpen) return null;
 
   // Handle final commit to database
   const handleConfirmImport = async () => {
@@ -430,7 +505,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
           r => !existingHnDateSet.has(`${r.hn.trim().toLowerCase()}_${r.date || ''}`)
         );
       } else if (duplicateMode === 'replace') {
-        // Find existing IDs to replace
         const existingMap = new Map(
           existingRecords.map(r => [`${r.hn.trim().toLowerCase()}_${r.date || ''}`, r.id])
         );
@@ -465,85 +539,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     }
   };
 
-  // Download Sample Excel Template
-  const handleDownloadTemplate = () => {
-    try {
-      const templateData = [
-        {
-          'ลำดับ': 1,
-          'วันที่รับบริการ': '2566-03-15',
-          'HN': '660012345',
-          'ชื่อ-สกุล': 'นายสมบัติ ทองสุข',
-          'อายุ': 68,
-          'เพศ': 'ชาย',
-          'ชนิดฟันเทียม': 'CD (ฟันเทียมทั้งปาก)',
-          'ตำแหน่ง': 'บนและล่าง',
-          'สิทธิการรักษา': 'UC (30 บาท)',
-          'ทันตแพทย์': 'สุนิษา',
-          'ค่าแลป': 2800,
-          'ค่ารักษา': 2800,
-          'สถานะ': 'เสร็จสิ้น (Completed)',
-          'หมายเหตุ': 'พิมพ์ปากขั้นที่สอง ส่งแลปเด็นทัล'
-        },
-        {
-          'ลำดับ': 2,
-          'วันที่รับบริการ': '2567-08-20',
-          'HN': '670054321',
-          'ชื่อ-สกุล': 'นางสมพร ศรีสวัสดิ์',
-          'อายุ': 72,
-          'เพศ': 'หญิง',
-          'ชนิดฟันเทียม': 'APD (ฐานพลาสติก)',
-          'ตำแหน่ง': 'บน',
-          'สิทธิการรักษา': 'ใช้สิทธิจ่ายตรง',
-          'ทันตแพทย์': 'บุณยาพร',
-          'ค่าแลป': 1200,
-          'ค่ารักษา': 1500,
-          'สถานะ': 'เสร็จสิ้น (Completed)',
-          'หมายเหตุ': 'เติมฟัน 2 ซี่'
-        },
-        {
-          'ลำดับ': 3,
-          'วันที่รับบริการ': '2568-11-10',
-          'HN': '680098765',
-          'ชื่อ-สกุล': 'นายวิชัย ใจดี',
-          'อายุ': 65,
-          'เพศ': 'ชาย',
-          'ชนิดฟันเทียม': 'CD/APD',
-          'ตำแหน่ง': 'บน CD / ล่าง APD',
-          'สิทธิการรักษา': 'UC (ผู้สูงอายุ)',
-          'ทันตแพทย์': 'กนกวรรณ',
-          'ค่าแลป': 3200,
-          'ค่ารักษา': 3200,
-          'สถานะ': 'เสร็จสิ้น (Completed)',
-          'หมายเหตุ': 'ลองขี้ผึ้งเสร็จ นัดใส่ฟัน'
-        },
-        {
-          'ลำดับ': 4,
-          'วันที่รับบริการ': '2569-02-05',
-          'HN': '690023456',
-          'ชื่อ-สกุล': 'นางประนอม มั่นคง',
-          'อายุ': 61,
-          'เพศ': 'หญิง',
-          'ชนิดฟันเทียม': 'ซ่อมฐานหัก',
-          'ตำแหน่ง': 'ล่าง',
-          'สิทธิการรักษา': 'ชำระเงินเอง',
-          'ทันตแพทย์': 'ศศิมนต์',
-          'ค่าแลป': 600,
-          'ค่ารักษา': 800,
-          'สถานะ': 'เสร็จสิ้น (Completed)',
-          'หมายเหตุ': 'ส่งแลปด่วน รับวันรุ่งขึ้น'
-        }
-      ];
-
-      const ws = XLSX.utils.json_to_sheet(templateData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'ตัวอย่างนำเข้าข้อมูล');
-      XLSX.writeFile(wb, 'denture_hospital_import_template_2566_2569.xlsx');
-    } catch (e) {
-      console.error('Error generating template:', e);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
       <div className="relative w-full max-w-4xl bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col max-h-[92vh]">
@@ -556,13 +551,13 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-zinc-900 dark:text-zinc-100 flex items-center space-x-2">
-                <span>นำเข้าข้อมูลเวชระเบียนจาก Excel (.xlsx / .csv)</span>
+                <span>นำเข้าข้อมูลเวชระเบียนทันตกรรม</span>
                 <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40">
-                  รองรับข้อมูลย้อนหลัง 2566 - 2569
+                  รองรับ Matrix 16 สิทธิ & Copy/Paste
                 </span>
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                โรงพยาบาลพยุหะคีรี • สแกนคอลัมน์อัตโนมัติ จัดกลุ่มสิทธิและคุณหมอในอดีตให้อัตโนมัติ
+                โรงพยาบาลพยุหะคีรี • สแกนอัตโนมัติ รวมชื่อ-สกุล แกะสิทธิ 16 ช่อง และดึงค่าแลปให้อัตโนมัติ
               </p>
             </div>
           </div>
@@ -576,74 +571,225 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
-          
-          {/* File Upload & Dropzone Area */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            
-            {/* Drag & Drop Target (2 Cols) */}
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className={`md:col-span-2 border-2 border-dashed rounded-3xl p-6 text-center cursor-pointer transition-all ${
-                selectedFile
-                  ? 'border-emerald-500/60 bg-emerald-50/40 dark:bg-emerald-950/20'
-                  : 'border-zinc-300 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-500 bg-zinc-50/50 dark:bg-zinc-800/30'
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx, .xls, .csv"
-                className="hidden"
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileChange(file);
-                }}
-              />
-              
-              <div className="flex flex-col items-center justify-center space-y-3">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
-                  selectedFile
-                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
-                    : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
-                }`}>
-                  {selectedFile ? <FileSpreadsheet className="w-6 h-6" /> : <Upload className="w-6 h-6" />}
-                </div>
 
+          {/* Data Safety Assurance Card */}
+          <div className="p-4 rounded-3xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-800/60 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center space-x-2.5 text-blue-900 dark:text-blue-200">
+                <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
                 <div>
-                  <p className="text-sm font-bold text-zinc-800 dark:text-zinc-100">
-                    {selectedFile ? selectedFile.name : 'คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ Excel มาวางที่นี่'}
-                  </p>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    {selectedFile
-                      ? `ขนาดไฟล์ ${(selectedFile.size / 1024).toFixed(1)} KB • คลิกเพื่อเปลี่ยนไฟล์`
-                      : 'รองรับไฟล์ .xlsx, .xls หรือ .csv ทุกเวอร์ชัน'}
+                  <h4 className="font-bold text-xs">ระบบความปลอดภัยข้อมูล (Data Safety Assurance)</h4>
+                  <p className="text-[11px] text-blue-700/80 dark:text-blue-300/80">
+                    ระบบใช้วิธีบันทึกแบบผสานข้อมูล (Append & Merge) — ข้อมูลปี 2569 และปีก่อนหน้าจะยังคงอยู่ครบถ้วน ปลอดภัย
                   </p>
                 </div>
               </div>
-            </div>
-
-            {/* Template Download & Guide Box (1 Col) */}
-            <div className="p-4 rounded-3xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-800 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center space-x-2 text-zinc-800 dark:text-zinc-200 font-bold mb-2">
-                  <Info className="w-4 h-4 text-blue-500" />
-                  <span>ยังไม่มีฟอร์มมาตรฐาน?</span>
-                </div>
-                <p className="text-zinc-500 dark:text-zinc-400 leading-relaxed text-[11px]">
-                  ดาวน์โหลดไฟล์เทมเพลตตัวอย่างที่มีโครงสร้างคอลัมน์มาตรฐานโรงพยาบาล พร้อมตัวอย่างเคสปี 66 - 69
-                </p>
-              </div>
-
               <button
                 type="button"
-                onClick={handleDownloadTemplate}
-                className="mt-4 flex items-center justify-center space-x-1.5 w-full py-2.5 px-3 rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shadow-xs"
+                onClick={handleDownloadBackupBeforeImport}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold hover:bg-blue-100/50 dark:hover:bg-zinc-700 transition-colors shadow-xs shrink-0 self-start sm:self-auto"
+                title="ดาวน์โหลดไฟล์สำรองข้อมูล JSON เก็บไว้"
               >
-                <Download className="w-3.5 h-3.5 text-blue-600" />
-                <span>โหลดตัวอย่าง Excel</span>
+                <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>สำรองข้อมูลเดิม (Backup)</span>
               </button>
             </div>
+
+            {/* Current System Breakdown Badges */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+              <div className="px-3 py-2 rounded-2xl bg-white/80 dark:bg-zinc-900/60 border border-blue-100 dark:border-blue-900/40">
+                <div className="text-[10px] text-zinc-500 dark:text-zinc-400">ปี 2569 ในระบบ</div>
+                <div className="text-sm font-bold font-mono text-emerald-600 dark:text-emerald-400 flex items-center space-x-1 mt-0.5">
+                  <span>{existingBreakdown.count2569} รายการ</span>
+                </div>
+              </div>
+              <div className="px-3 py-2 rounded-2xl bg-white/80 dark:bg-zinc-900/60 border border-blue-100 dark:border-blue-900/40">
+                <div className="text-[10px] text-zinc-500 dark:text-zinc-400">ปี 2566 ในระบบ</div>
+                <div className="text-sm font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-0.5">
+                  {existingBreakdown.count2566} รายการ
+                </div>
+              </div>
+              <div className="px-3 py-2 rounded-2xl bg-white/80 dark:bg-zinc-900/60 border border-blue-100 dark:border-blue-900/40">
+                <div className="text-[10px] text-zinc-500 dark:text-zinc-400">ปีอื่นๆ ในระบบ</div>
+                <div className="text-sm font-bold font-mono text-blue-600 dark:text-blue-400 mt-0.5">
+                  {existingBreakdown.count2568 + existingBreakdown.count2567 + existingBreakdown.countOther} รายการ
+                </div>
+              </div>
+              <div className="px-3 py-2 rounded-2xl bg-white/80 dark:bg-zinc-900/60 border border-blue-100 dark:border-blue-900/40">
+                <div className="text-[10px] text-zinc-500 dark:text-zinc-400">รวมทั้งหมดในระบบ</div>
+                <div className="text-sm font-bold font-mono text-zinc-900 dark:text-zinc-100 mt-0.5">
+                  {existingBreakdown.total} รายการ
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Tab Selector: Upload File vs Paste Text */}
+          <div className="flex border-b border-zinc-200 dark:border-zinc-800 space-x-4">
+            <button
+              type="button"
+              onClick={() => setActiveTab('paste')}
+              className={`pb-2.5 px-2 font-bold text-xs flex items-center space-x-2 border-b-2 transition-all ${
+                activeTab === 'paste'
+                  ? 'border-emerald-600 text-emerald-600 dark:text-emerald-400'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
+              }`}
+            >
+              <ClipboardCopy className="w-4 h-4" />
+              <span>📋 วางข้อความจาก Excel (Copy & Paste)</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200">
+                แนะนำ
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('file')}
+              className={`pb-2.5 px-2 font-bold text-xs flex items-center space-x-2 border-b-2 transition-all ${
+                activeTab === 'file'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
+              }`}
+            >
+              <Upload className="w-4 h-4" />
+              <span>📁 อัปโหลดไฟล์ (.xlsx / .csv)</span>
+            </button>
+          </div>
+
+          {/* TAB 1: PASTE TEXT DIRECTLY */}
+          {activeTab === 'paste' && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="font-bold text-zinc-800 dark:text-zinc-200 flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-emerald-600" />
+                  <span>วางข้อมูลที่ Copy มาจากไฟล์ Excel หรือ CSV ได้เลยที่นี่:</span>
+                </label>
+                {pastedText && (
+                  <button
+                    type="button"
+                    onClick={() => handlePastedTextChange('')}
+                    className="text-xs text-rose-500 hover:underline flex items-center space-x-1"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>ล้างข้อความ</span>
+                  </button>
+                )}
+              </div>
+
+              <textarea
+                value={pastedText}
+                onChange={e => handlePastedTextChange(e.target.value)}
+                rows={6}
+                placeholder="คลิกที่นี่แล้วกด Ctrl+V (วางข้อมูลจาก Excel)... ระบบจะวิเคราะห์คอลัมน์ รวมชื่อ-สกุล แยกงวดเดือน และแกะสิทธิ 16 ช่องให้อัตโนมัติ"
+                className="w-full p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 font-mono text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              />
+              <p className="text-[11px] text-zinc-400">
+                💡 <strong>เคล็ดลับ:</strong> สามารถเปิดไฟล์ Excel แล้วกดคลุมดำเลือกแถวที่ต้องการ (Ctrl+A หรือลากคลุม) แล้วกด Copy (Ctrl+C) นำมาวางที่นี่ได้ทันที
+              </p>
+            </div>
+          )}
+
+          {/* TAB 2: FILE UPLOAD */}
+          {activeTab === 'file' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className={`md:col-span-2 border-2 border-dashed rounded-3xl p-6 text-center cursor-pointer transition-all ${
+                  selectedFile
+                    ? 'border-emerald-500/60 bg-emerald-50/40 dark:bg-emerald-950/20'
+                    : 'border-zinc-300 dark:border-zinc-700 hover:border-blue-500 dark:hover:border-blue-500 bg-zinc-50/50 dark:bg-zinc-800/30'
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileChange(file);
+                  }}
+                />
+                
+                <div className="flex flex-col items-center justify-center space-y-3">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                    selectedFile
+                      ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20'
+                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                  }`}>
+                    {selectedFile ? <FileSpreadsheet className="w-6 h-6" /> : <Upload className="w-6 h-6" />}
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                      {selectedFile ? selectedFile.name : 'คลิกเพื่อเลือกไฟล์ หรือลากไฟล์ Excel มาวางที่นี่'}
+                    </p>
+                    <p className="text-xs text-zinc-400 mt-1">
+                      {selectedFile
+                        ? `ขนาดไฟล์ ${(selectedFile.size / 1024).toFixed(1)} KB • คลิกเพื่อเปลี่ยนไฟล์`
+                        : 'รองรับไฟล์ .xlsx, .xls หรือ .csv ทุกเวอร์ชัน'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-3xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-800 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center space-x-2 text-zinc-800 dark:text-zinc-200 font-bold mb-2">
+                    <Info className="w-4 h-4 text-blue-500" />
+                    <span>ระบบรองรับ 2 แบบ</span>
+                  </div>
+                  <p className="text-zinc-500 dark:text-zinc-400 leading-relaxed text-[11px]">
+                    1. ตารางแบบ <strong>ทะเบียนเบิกจ่าย (Matrix 16 สิทธิ)</strong><br />
+                    2. ตารางแบบ <strong>แถวปกติ (Single Header)</strong>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MATRIX FORMAT DETECTION & MONTH SELECTOR BANNER */}
+          {matrixResult && matrixResult.isMatrix && (
+            <div className="p-4 rounded-3xl bg-emerald-50/80 dark:bg-emerald-950/30 border-2 border-emerald-300 dark:border-emerald-800 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/30">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center space-x-2">
+                      <span>ตรวจพบ: ตารางทะเบียนเบิกจ่ายทันตกรรม (Matrix 16 สิทธิ)</span>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-100 font-mono font-bold">
+                        รวม {matrixResult.totalFound} เคส
+                      </span>
+                    </h4>
+                    <p className="text-xs text-emerald-800 dark:text-emerald-300 mt-0.5">
+                      ระบบรวมคำนำหน้า+ชื่อ+สกุล, แปลงวันที่รักษาจริง, แกะสิทธิ 16 ช่อง และดึงค่าแลปให้อัตโนมัติ 100%
+                    </p>
+                  </div>
+                </div>
+
+                {/* Month Choice Dropdown */}
+                {matrixResult.monthList.length > 0 && (
+                  <div className="flex items-center space-x-2 self-start sm:self-auto bg-white dark:bg-zinc-900 p-1.5 rounded-2xl border border-emerald-300 dark:border-emerald-700 shrink-0">
+                    <Calendar className="w-4 h-4 text-emerald-600 ml-1" />
+                    <span className="font-bold text-zinc-700 dark:text-zinc-300 text-xs">เลือกงวดเดือน:</span>
+                    <select
+                      value={selectedMatrixMonth}
+                      onChange={e => setSelectedMatrixMonth(e.target.value)}
+                      className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-zinc-800 border border-emerald-200 dark:border-emerald-700 text-emerald-900 dark:text-emerald-100 font-bold text-xs focus:outline-none"
+                    >
+                      <option value="all">⚡ นำเข้าทุกเดือน (ทั้งหมด {matrixResult.totalFound} เคส)</option>
+                      {matrixResult.monthList.map(m => (
+                        <option key={m.key} value={m.key}>
+                          📅 {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Status / Error Notifications */}
           {errorMsg && (
@@ -660,190 +806,6 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
             </div>
           )}
 
-          {/* Sheet Selector (If multiple sheets detected) */}
-          {sheetNames.length > 1 && (
-            <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-800">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center space-x-2">
-                  <Layers className="w-4 h-4 text-indigo-500" />
-                  <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                    พบ {sheetNames.length} แผ่นงาน (Sheets) ในไฟล์นี้:
-                  </span>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <label className="text-zinc-500 dark:text-zinc-400">เลือก Sheet:</label>
-                  <select
-                    value={selectedSheet}
-                    onChange={e => handleSheetChange(e.target.value)}
-                    className="px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">⚡ รวมทุก Sheet พร้อมกัน (ทั้งหมด {sheetNames.length} Sheets)</option>
-                    {sheetNames.map(s => (
-                      <option key={s} value={s}>
-                        📄 Sheet: {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Column Mapping Accordion */}
-          {availableColumns.length > 0 && (
-            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowMappingSettings(prev => !prev)}
-                className="w-full px-4 py-3 bg-zinc-50 dark:bg-zinc-800/60 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-left flex items-center justify-between transition-colors"
-              >
-                <div className="flex items-center space-x-2">
-                  <Filter className="w-4 h-4 text-blue-500" />
-                  <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                    การจับคู่คอลัมน์ (Column Mapping)
-                  </span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
-                    จับคู่อัตโนมัติแล้ว {Object.values(columnMapping).filter(Boolean).length}/13 ช่อง
-                  </span>
-                </div>
-                <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform ${showMappingSettings ? 'rotate-180' : ''}`} />
-              </button>
-
-              {showMappingSettings && (
-                <div className="p-4 bg-white dark:bg-zinc-900 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 border-t border-zinc-100 dark:border-zinc-800">
-                  
-                  <div>
-                    <label className="block text-zinc-500 dark:text-zinc-400 mb-1 font-medium">
-                      HN (เลขเวชระเบียน) *
-                    </label>
-                    <select
-                      value={columnMapping.hn}
-                      onChange={e => setColumnMapping({ ...columnMapping, hn: e.target.value })}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="">-- ไม่ระบุ / สร้างให้อัตโนมัติ --</option>
-                      {availableColumns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 dark:text-zinc-400 mb-1 font-medium">
-                      ชื่อ-สกุล ผู้ป่วย *
-                    </label>
-                    <select
-                      value={columnMapping.patientName}
-                      onChange={e => setColumnMapping({ ...columnMapping, patientName: e.target.value })}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="">-- ไม่ระบุ --</option>
-                      {availableColumns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 dark:text-zinc-400 mb-1 font-medium">
-                      วันที่รับบริการ / วันที่ทำ *
-                    </label>
-                    <select
-                      value={columnMapping.date}
-                      onChange={e => setColumnMapping({ ...columnMapping, date: e.target.value })}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="">-- ไม่ระบุ (ใช้วันปัจจุบัน) --</option>
-                      {availableColumns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 dark:text-zinc-400 mb-1 font-medium">
-                      ชนิดฟันเทียม (CD, APD, TP ฯลฯ) *
-                    </label>
-                    <select
-                      value={columnMapping.dentureType}
-                      onChange={e => setColumnMapping({ ...columnMapping, dentureType: e.target.value })}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="">-- ไม่ระบุ (ค่าเริ่มต้น: CD) --</option>
-                      {availableColumns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 dark:text-zinc-400 mb-1 font-medium">
-                      สิทธิการรักษา (UC, จ่ายตรง ฯลฯ)
-                    </label>
-                    <select
-                      value={columnMapping.coverage}
-                      onChange={e => setColumnMapping({ ...columnMapping, coverage: e.target.value })}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="">-- ไม่ระบุ (ค่าเริ่มต้น: UC 30 บาท) --</option>
-                      {availableColumns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 dark:text-zinc-400 mb-1 font-medium">
-                      ทันตแพทย์ผู้รักษา (หมอ)
-                    </label>
-                    <select
-                      value={columnMapping.doctor}
-                      onChange={e => setColumnMapping({ ...columnMapping, doctor: e.target.value })}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="">-- ไม่ระบุ (ค่าเริ่มต้น: กนกวรรณ) --</option>
-                      {availableColumns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 dark:text-zinc-400 mb-1 font-medium">
-                      ค่าแลป (LAB Cost บาท)
-                    </label>
-                    <select
-                      value={columnMapping.labCost}
-                      onChange={e => setColumnMapping({ ...columnMapping, labCost: e.target.value })}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="">-- ไม่ระบุ (0 บาท) --</option>
-                      {availableColumns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 dark:text-zinc-400 mb-1 font-medium">
-                      ค่ารักษา / มูลค่าบริการ
-                    </label>
-                    <select
-                      value={columnMapping.treatmentFee}
-                      onChange={e => setColumnMapping({ ...columnMapping, treatmentFee: e.target.value })}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="">-- ไม่ระบุ (เท่ากับค่าแลป) --</option>
-                      {availableColumns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-zinc-500 dark:text-zinc-400 mb-1 font-medium">
-                      หมายเหตุ / ข้อความเพิ่มเติม
-                    </label>
-                    <select
-                      value={columnMapping.note}
-                      onChange={e => setColumnMapping({ ...columnMapping, note: e.target.value })}
-                      className="w-full px-2.5 py-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100"
-                    >
-                      <option value="">-- ไม่ระบุ --</option>
-                      {availableColumns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Analysis & Summary Statistics */}
           {parsedRecords.length > 0 && (
             <div className="space-y-4">
@@ -851,7 +813,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
               {/* Summary KPIs */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-zinc-800">
-                  <span className="text-[11px] text-zinc-400">รายการที่พบในไฟล์</span>
+                  <span className="text-[11px] text-zinc-400">รายการที่พร้อมนำเข้า</span>
                   <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100 font-mono mt-0.5">
                     {stats.total.toLocaleString()} รายการ
                   </div>
@@ -860,18 +822,14 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/40">
                   <span className="text-[11px] text-emerald-600 dark:text-emerald-400">รวมค่าใช้จ่าย LAB</span>
                   <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300 font-mono mt-0.5">
-                    ฿{stats.totalLab.toLocaleString()}
+                    ฿{stats.totalLab.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </div>
                 </div>
 
-                <div className="p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/40">
-                  <span className="text-[11px] text-blue-600 dark:text-blue-400">ช่วงปี พ.ศ. ที่พบ</span>
-                  <div className="text-xs font-bold text-blue-700 dark:text-blue-300 font-mono mt-1 flex flex-wrap gap-1">
-                    {Object.entries(stats.yearCounts).map(([yr, cnt]) => (
-                      <span key={yr} className="px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/60">
-                        {yr}: {cnt}
-                      </span>
-                    ))}
+                <div className="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/40">
+                  <span className="text-[11px] text-indigo-600 dark:text-indigo-400">รวมมูลค่าค่ารักษา</span>
+                  <div className="text-lg font-bold text-indigo-700 dark:text-indigo-300 font-mono mt-0.5">
+                    ฿{stats.totalFee.toLocaleString()}
                   </div>
                 </div>
 
@@ -891,7 +849,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
               <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800">
                 <div className="flex items-center space-x-2 mb-2 font-bold text-zinc-700 dark:text-zinc-300">
                   <Stethoscope className="w-4 h-4 text-blue-600" />
-                  <span>รายชื่อทันตแพทย์ที่ตรวจพบในไฟล์:</span>
+                  <span>รายชื่อทันตแพทย์ที่ตรวจพบในชุดข้อมูลนี้:</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {Object.entries(stats.doctorCounts).map(([docName, cnt]) => {
@@ -906,7 +864,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                         }`}
                       >
                         <span>{docName}</span>
-                        <span className="font-mono text-[10px] opacity-75">({cnt})</span>
+                        <span className="font-mono text-[10px] opacity-75">({cnt} เคส)</span>
                         {!isCurrent && (
                           <span className="text-[9px] px-1 py-0.2 rounded bg-purple-200 dark:bg-purple-900 text-purple-800 dark:text-purple-200">
                             แพทย์เดิม
@@ -956,7 +914,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                     />
                     <div>
                       <div className="font-semibold text-xs">อัปเดต / แทนที่เดิม</div>
-                      <div className="text-[11px] text-zinc-400">ปรับปรุงข้อมูลเคสเดิมให้ตรงกับใน Excel</div>
+                      <div className="text-[11px] text-zinc-400">ปรับปรุงข้อมูลเคสเดิมให้ตรงกับในไฟล์</div>
                     </div>
                   </label>
 
@@ -980,37 +938,38 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                 </div>
               </div>
 
-              {/* Table Preview (First 5 Rows) */}
+              {/* Table Preview (First 8 Rows) */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                    ตัวอย่างข้อมูล 5 รายการแรกที่จะนำเข้า:
+                    ตัวอย่างข้อมูลที่จะนำเข้า ({parsedRecords.length} รายการ):
                   </span>
                   <span className="text-[11px] text-zinc-400">
-                    (แสดงตัวอย่างหลังจากแปลงวันที่และจัดกลุ่มสิทธิแล้ว)
+                    (แสดงตัวอย่างหลังจากแปลงวันที่ รวมชื่อ-สกุล และแกะสิทธิแล้ว)
                   </span>
                 </div>
 
-                <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-zinc-800">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-zinc-50 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 text-[11px]">
+                <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-zinc-800 max-h-60 overflow-y-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-zinc-50 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 text-[11px] sticky top-0">
                       <tr>
                         <th className="py-2 px-3">ลำดับ</th>
-                        <th className="py-2 px-3">วันที่</th>
+                        <th className="py-2 px-3">วันที่รักษาจริง</th>
                         <th className="py-2 px-3">HN</th>
                         <th className="py-2 px-3">ชื่อ-สกุล</th>
-                        <th className="py-2 px-3">ชนิดฟัน</th>
-                        <th className="py-2 px-3">สิทธิ</th>
-                        <th className="py-2 px-3">หมอ</th>
+                        <th className="py-2 px-3">ชนิดฟันปลอม</th>
+                        <th className="py-2 px-3">สิทธิการรักษา</th>
+                        <th className="py-2 px-3 text-right">ค่ารักษา</th>
                         <th className="py-2 px-3 text-right">ค่าแลป</th>
+                        <th className="py-2 px-3">ทันตแพทย์</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 text-zinc-800 dark:text-zinc-200">
-                      {parsedRecords.slice(0, 5).map((r, idx) => (
-                        <tr key={r.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40">
+                      {parsedRecords.slice(0, 15).map((r, idx) => (
+                        <tr key={r.id || idx} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-800/40">
                           <td className="py-2 px-3 font-mono text-zinc-400">{idx + 1}</td>
-                          <td className="py-2 px-3 font-mono">{r.date}</td>
-                          <td className="py-2 px-3 font-mono font-semibold text-blue-600 dark:text-blue-400">{r.hn}</td>
+                          <td className="py-2 px-3 font-mono text-blue-600 dark:text-blue-400">{r.date}</td>
+                          <td className="py-2 px-3 font-mono font-semibold">{r.hn}</td>
                           <td className="py-2 px-3 font-medium">{r.patientName}</td>
                           <td className="py-2 px-3">
                             <span className="px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 font-semibold text-[11px]">
@@ -1019,13 +978,16 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
                           </td>
                           <td className="py-2 px-3">
                             <span className="px-2 py-0.5 rounded text-[11px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
-                              {r.coverageGroup} • {r.coverage}
+                              {r.coverage}
                             </span>
                           </td>
-                          <td className="py-2 px-3">{r.doctor}</td>
-                          <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-600">
-                            ฿{r.labCost.toLocaleString()}
+                          <td className="py-2 px-3 text-right font-mono font-semibold text-indigo-600 dark:text-indigo-400">
+                            ฿{(r.treatmentFee || 0).toLocaleString()}
                           </td>
+                          <td className="py-2 px-3 text-right font-mono font-semibold text-emerald-600">
+                            ฿{(r.labCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-2 px-3">{r.doctor}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1042,9 +1004,9 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
         <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-100 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-900/80">
           <div className="text-zinc-500 dark:text-zinc-400 text-xs">
             {parsedRecords.length > 0 ? (
-              <span>พร้อมนำเข้า <strong className="text-zinc-900 dark:text-zinc-100">{parsedRecords.length}</strong> รายการ</span>
+              <span>พร้อมนำเข้า <strong className="text-zinc-900 dark:text-zinc-100 font-mono">{parsedRecords.length}</strong> รายการ</span>
             ) : (
-              <span>กรุณาเลือกไฟล์เพื่อเริ่มต้น</span>
+              <span>กรุณาวางข้อความ หรือเลือกไฟล์เพื่อเริ่มต้น</span>
             )}
           </div>
 
