@@ -1,5 +1,5 @@
 import React from 'react';
-import { DollarSign, TrendingUp, Download, PieChart, FileCheck, Layers, Calendar, Shield } from 'lucide-react';
+import { DollarSign, TrendingUp, Download, PieChart, FileCheck, Layers, Calendar, Shield, PiggyBank } from 'lucide-react';
 import { DentureRecord, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName } from '../types';
 
 interface LabCostSummaryViewProps {
@@ -16,6 +16,9 @@ export const LabCostSummaryView: React.FC<LabCostSummaryViewProps> = ({
   isPdpaMode = false,
 }) => {
   const totalLab = records.reduce((acc, r) => acc + (r.labCost || 0), 0);
+  const totalTreatmentFee = records.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
+  const netMargin = totalTreatmentFee - totalLab;
+  const netMarginPercent = totalTreatmentFee > 0 ? (netMargin / totalTreatmentFee) * 100 : 0;
   const recordsWithLab = records.filter(r => (r.labCost || 0) > 0);
   const avgLab = recordsWithLab.length > 0 ? totalLab / recordsWithLab.length : 0;
   const maxLab = records.reduce((max, r) => Math.max(max, r.labCost || 0), 0);
@@ -84,8 +87,8 @@ export const LabCostSummaryView: React.FC<LabCostSummaryViewProps> = ({
       </div>
 
       {/* Financial Metrics Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
+        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-2">
           <span className="text-xs text-zinc-400 font-medium">ยอดรวมค่าใช้จ่าย LAB</span>
           <div className="text-2xl sm:text-3xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
             ฿{totalLab.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
@@ -93,7 +96,7 @@ export const LabCostSummaryView: React.FC<LabCostSummaryViewProps> = ({
           <p className="text-[11px] text-zinc-400">จาก {recordsWithLab.length} เคสที่ส่งแลป</p>
         </div>
 
-        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-2">
+        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-2">
           <span className="text-xs text-zinc-400 font-medium">ค่าแลปเฉลี่ยต่อเคส</span>
           <div className="text-2xl sm:text-3xl font-bold font-mono text-zinc-900 dark:text-zinc-100">
             ฿{avgLab.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
@@ -101,7 +104,20 @@ export const LabCostSummaryView: React.FC<LabCostSummaryViewProps> = ({
           <p className="text-[11px] text-zinc-400">เฉลี่ยต่อชิ้นงานทันตกรรม</p>
         </div>
 
-        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-2">
+        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-indigo-50/80 to-blue-50/40 dark:from-indigo-950/30 dark:to-blue-950/20 border border-indigo-200/80 dark:border-indigo-800/60 shadow-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-indigo-900 dark:text-indigo-300">ส่วนต่างสุทธิ (Net Margin)</span>
+            <PiggyBank className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div className="text-2xl sm:text-3xl font-bold font-mono text-indigo-700 dark:text-indigo-300">
+            ฿{netMargin.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          </div>
+          <p className="text-[11px] text-indigo-600/80 dark:text-indigo-400">
+            {netMarginPercent >= 0 ? '+' : ''}{netMarginPercent.toFixed(1)}% ของมูลค่ารักษา
+          </p>
+        </div>
+
+        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-2">
           <span className="text-xs text-zinc-400 font-medium">ค่าแลปสูงสุด</span>
           <div className="text-2xl sm:text-3xl font-bold font-mono text-blue-600 dark:text-blue-400">
             ฿{maxLab.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
@@ -109,7 +125,7 @@ export const LabCostSummaryView: React.FC<LabCostSummaryViewProps> = ({
           <p className="text-[11px] text-zinc-400">ชิ้นงาน CD 2 ชิ้น (บน-ล่าง)</p>
         </div>
 
-        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-2">
+        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-2">
           <span className="text-xs text-zinc-400 font-medium">ค่าแลปเริ่มต้น</span>
           <div className="text-2xl sm:text-3xl font-bold font-mono text-purple-600 dark:text-purple-400">
             ฿{minLab > 0 ? minLab.toLocaleString('th-TH', { minimumFractionDigits: 2 }) : '0.00'}

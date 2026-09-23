@@ -1,9 +1,52 @@
 @import "tailwindcss";
 
-@layer base {
-  body {
-    font-family: 'Prompt', 'Sarabun', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+:root {
+  --font-ios: 'Plus Jakarta Sans', 'Anuphan', -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Sukhumvit Set", sans-serif;
+  --font-prompt: 'Plus Jakarta Sans', 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-ibm: 'Plus Jakarta Sans', 'IBM Plex Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+html {
+  font-family: var(--font-ios);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Default iOS font styling */
+body, body:not([data-font]), body[data-font="ios"] {
+  font-family: var(--font-ios) !important;
+  letter-spacing: -0.01em;
+}
+
+body[data-font="prompt"] {
+  font-family: var(--font-prompt) !important;
+  letter-spacing: -0.005em;
+}
+
+body[data-font="ibm"] {
+  font-family: var(--font-ibm) !important;
+  letter-spacing: 0;
+}
+
+/* Ensure buttons, inputs, selects, headings all inherit the active font */
+*, button, input, select, textarea, h1, h2, h3, h4, h5, h6 {
+  font-family: inherit;
+}
+
+body[data-font="prompt"] .font-sans {
+  font-family: var(--font-prompt) !important;
+}
+
+body[data-font="ibm"] .font-sans {
+  font-family: var(--font-ibm) !important;
+}
+
+body, body[data-font="ios"] .font-sans, body:not([data-font]) .font-sans {
+  font-family: var(--font-ios) !important;
+}
+
+.font-mono {
+  font-family: var(--font-mono) !important;
+  font-variant-numeric: tabular-nums;
 }

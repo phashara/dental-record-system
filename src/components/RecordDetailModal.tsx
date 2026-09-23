@@ -178,11 +178,18 @@ export const RecordDetailModal: React.FC<RecordDetailModalProps> = ({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block">
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block font-medium">
                   ค่าใช้จ่าย LAB (บาท) ✍️
+                  {(record.labCost || 0) < 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
+                      ปรับลดยอด/คืนเงิน
+                    </span>
+                  )}
                 </span>
-                <span className="text-xl font-bold font-mono text-emerald-700 dark:text-emerald-300">
-                  ฿{record.labCost?.toLocaleString('th-TH', { minimumFractionDigits: 2 }) || '0.00'}
+                <span className={`text-xl font-bold font-mono ${(record.labCost || 0) < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-700 dark:text-emerald-300'}`}>
+                  {(record.labCost || 0) < 0
+                    ? `-฿${Math.abs(record.labCost || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+                    : `฿${record.labCost?.toLocaleString('th-TH', { minimumFractionDigits: 2 }) || '0.00'}`}
                 </span>
               </div>
 

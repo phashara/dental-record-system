@@ -12,7 +12,9 @@ import {
   ArrowRight,
   Filter,
   RotateCcw,
-  FileText
+  FileText,
+  PiggyBank,
+  Scale
 } from 'lucide-react';
 import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName, normalizeRecordDate, getYearBE } from '../types';
 
@@ -72,6 +74,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const totalPatients = filteredRecords.length;
   const totalLabCost = filteredRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
   const totalTreatmentFee = filteredRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
+  const netMargin = totalTreatmentFee - totalLabCost;
+  const netMarginPercent = totalTreatmentFee > 0 ? (netMargin / totalTreatmentFee) * 100 : 0;
   const avgLabCost = totalPatients > 0 ? totalLabCost / totalPatients : 0;
 
   // Denture type breakdown
@@ -120,6 +124,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const count = docRecords.length;
       const labSum = docRecords.reduce((acc, r) => acc + (r.labCost || 0), 0);
       const feeSum = docRecords.reduce((acc, r) => acc + (r.treatmentFee || 0), 0);
+      const netSum = feeSum - labSum;
       const color = current ? current.color : extraColors[extraColorIdx++ % extraColors.length];
 
       return {
@@ -130,6 +135,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         count,
         labSum,
         feeSum,
+        netSum,
         percentage: totalPatients > 0 ? Math.round((count / totalPatients) * 100) : 0,
         recentCases: docRecords.slice(0, 3)
       };
@@ -389,9 +395,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* Primary Key Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
         {/* Total Patients */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-3">
+        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
               ผู้ป่วยฟันปลอมทั้งหมด
@@ -411,8 +417,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
+        {/* Total Treatment Value */}
+        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              มูลค่าการรักษาทั้งหมด
+            </span>
+            <div className="w-9 h-9 rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+              <Award className="w-4 h-4" />
+            </div>
+          </div>
+          <div>
+            <div className="text-2xl sm:text-3xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">
+              ฿{totalTreatmentFee.toLocaleString('th-TH', { minimumFractionDigits: 0 })}
+            </div>
+            <p className="text-[11px] text-zinc-400 mt-1">
+              ยอดตั้งเบิก & ค่าบริการ รพ.
+            </p>
+          </div>
+        </div>
+
         {/* Total Lab Costs */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-3">
+        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
               รวมค่าใช้จ่าย LAB
@@ -431,28 +457,37 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Total Treatment Value */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-3">
+        {/* Net Margin Card */}
+        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-indigo-50/80 via-blue-50/40 to-white dark:from-indigo-950/30 dark:via-blue-950/20 dark:to-zinc-900 border border-indigo-200/80 dark:border-indigo-800/60 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              มูลค่าการรักษาทั้งหมด
+            <span className="text-xs font-bold text-indigo-900 dark:text-indigo-300">
+              ส่วนต่างสุทธิ (Net Margin)
             </span>
-            <div className="w-9 h-9 rounded-2xl bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-              <Award className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+              <PiggyBank className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <div className="text-2xl sm:text-3xl font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">
-              ฿{totalTreatmentFee.toLocaleString('th-TH', { minimumFractionDigits: 0 })}
+            <div className={`text-2xl sm:text-3xl font-bold tracking-tight ${netMargin >= 0 ? 'text-indigo-700 dark:text-indigo-300' : 'text-rose-600'}`}>
+              ฿{netMargin.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
             </div>
-            <p className="text-[11px] text-zinc-400 mt-1">
-              รวมค่าบริการ & หัตถการทันตกรรม
-            </p>
+            <div className="flex items-center space-x-1.5 mt-1">
+              <span className={`inline-flex items-center px-1.5 py-0.2 rounded-md text-[10px] font-bold ${
+                netMargin >= 0
+                  ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200'
+                  : 'bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200'
+              }`}>
+                {netMarginPercent >= 0 ? '+' : ''}{netMarginPercent.toFixed(1)}%
+              </span>
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                คงเหลือหลังหักค่าแลป
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Active Dentists */}
-        <div className="p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-3">
+        <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
               ทันตแพทย์ผู้ดูแล
@@ -469,6 +504,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {doctorStats.filter(d => d.count > 0).map(d => d.name).join(', ') || 'ไม่มีข้อมูลในตัวกรองนี้'}
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Financial Formula Mini-Banner */}
+      <div className="p-4 rounded-2xl bg-zinc-50/80 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+        <div className="flex items-center space-x-2 text-zinc-600 dark:text-zinc-300">
+          <Scale className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+          <span className="font-semibold">สมการสรุปสถานะการเงินฟันเทียม:</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 font-mono font-bold">
+          <span className="text-purple-600 dark:text-purple-400">
+            มูลค่ารักษา ฿{totalTreatmentFee.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
+          </span>
+          <span className="text-zinc-400 font-sans">-</span>
+          <span className="text-emerald-600 dark:text-emerald-400">
+            ค่าแลป ฿{totalLabCost.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
+          </span>
+          <span className="text-zinc-400 font-sans">=</span>
+          <span className="text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-xl border border-indigo-200/60 dark:border-indigo-800/60">
+            ส่วนต่างสุทธิ ฿{netMargin.toLocaleString('th-TH', { maximumFractionDigits: 0 })} ({netMarginPercent.toFixed(1)}%)
+          </span>
         </div>
       </div>
 
@@ -518,6 +574,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <span className="text-zinc-500 dark:text-zinc-400">รวมค่าแลป:</span>
                   <span className="font-semibold text-emerald-600 dark:text-emerald-400">
                     ฿{doc.labSum.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+                <div className="flex justify-between items-baseline text-xs">
+                  <span className="text-zinc-500 dark:text-zinc-400">ส่วนต่างสุทธิ:</span>
+                  <span className={`font-bold ${doc.netSum >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-600'}`}>
+                    ฿{doc.netSum.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
                   </span>
                 </div>
               </div>

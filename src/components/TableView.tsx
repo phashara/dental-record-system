@@ -455,8 +455,10 @@ export const TableView: React.FC<TableViewProps> = ({
                       })()}
                     </td>
 
-                    <td className="py-3 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      ฿{r.labCost?.toLocaleString('th-TH', { minimumFractionDigits: 2 }) || '0.00'}
+                    <td className={`py-3 px-3 text-right font-mono font-bold ${(r.labCost || 0) < 0 ? 'text-rose-600 dark:text-rose-400 font-extrabold' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {(r.labCost || 0) < 0
+                        ? `-฿${Math.abs(r.labCost).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+                        : `฿${(r.labCost || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`}
                     </td>
 
                     <td className="py-3 px-3 text-right font-mono text-zinc-700 dark:text-zinc-300">
@@ -615,9 +617,18 @@ export const TableView: React.FC<TableViewProps> = ({
 
               <div className="flex items-center justify-between pt-2 border-t border-zinc-100 dark:border-zinc-800">
                 <div>
-                  <span className="text-[11px] text-zinc-400">ค่าใช้จ่าย LAB:</span>
-                  <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                    ฿{r.labCost?.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                  <span className="text-[11px] text-zinc-400">
+                    ค่าใช้จ่าย LAB:
+                    {(r.labCost || 0) < 0 && (
+                      <span className="ml-1 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                        (ปรับลดยอด)
+                      </span>
+                    )}
+                  </span>
+                  <p className={`text-sm font-bold font-mono ${(r.labCost || 0) < 0 ? 'text-rose-600 dark:text-rose-400 font-extrabold' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                    {(r.labCost || 0) < 0
+                      ? `-฿${Math.abs(r.labCost || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
+                      : `฿${(r.labCost || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`}
                   </p>
                 </div>
 

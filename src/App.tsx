@@ -94,6 +94,27 @@ export default function App() {
     }
   });
 
+  // Font Family State
+  const [fontFamily, setFontFamily] = useState<'ios' | 'prompt' | 'ibm'>(() => {
+    try {
+      const saved = safeGetStorage('local', 'denture_font_family');
+      return (saved as 'ios' | 'prompt' | 'ibm') || 'ios';
+    } catch {
+      return 'ios';
+    }
+  });
+
+  useEffect(() => {
+    document.body.setAttribute('data-font', fontFamily);
+    safeSetStorage('local', 'denture_font_family', fontFamily);
+  }, [fontFamily]);
+
+  const handleChangeFontFamily = (font: 'ios' | 'prompt' | 'ibm') => {
+    setFontFamily(font);
+    const label = font === 'ios' ? '📱 iOS Modern (Apple SF / Sukhumvit)' : font === 'prompt' ? '🅰️ Prompt (โมเดิร์นคลีน)' : '💻 IBM Plex Sans Thai';
+    showToast(`✨ สลับรูปแบบฟอนต์เป็น: ${label}`);
+  };
+
   const [isGitHubModalOpen, setIsGitHubModalOpen] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(dentureStorage.isOnline());
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
@@ -266,6 +287,8 @@ export default function App() {
         onOpenGitHubModal={() => setIsGitHubModalOpen(true)}
         onOpenDataManagement={() => setIsDataManagementOpen(true)}
         onLockScreen={handleLock}
+        fontFamily={fontFamily}
+        onChangeFontFamily={handleChangeFontFamily}
       />
 
       {/* Main Container Content */}
@@ -318,7 +341,7 @@ export default function App() {
       </main>
 
       {/* Mobile iOS Bottom Tab Bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 backdrop-blur-xl bg-white/90 dark:bg-zinc-950/90 border-t border-zinc-200/70 dark:border-zinc-800/70 px-4 py-2">
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 backdrop-blur-2xl bg-white/85 dark:bg-zinc-950/85 border-t border-zinc-200/60 dark:border-zinc-800/60 px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg">
         <div className="flex items-center justify-around">
           <button
             onClick={() => setCurrentTab('dashboard')}
@@ -347,7 +370,8 @@ export default function App() {
           {/* Quick Center Camera Button */}
           <button
             onClick={() => setIsScannerOpen(true)}
-            className="flex flex-col items-center justify-center -mt-5 w-12 h-12 rounded-full bg-blue-600 text-white shadow-lg active:scale-95 transition-transform"
+            className="flex flex-col items-center justify-center -mt-6 w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-sky-500 text-white shadow-lg shadow-blue-500/30 active:scale-90 transition-transform ring-4 ring-white dark:ring-zinc-950"
+            title="ถ่ายรูปสแกน AI"
           >
             <Camera className="w-5 h-5" />
           </button>
