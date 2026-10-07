@@ -14,7 +14,10 @@ import {
   RotateCcw,
   FileText,
   PiggyBank,
-  Scale
+  Scale,
+  Wrench,
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
 import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName, normalizeRecordDate, getYearBE } from '../types';
 import { YearlyComparisonBarChart } from './YearlyComparisonBarChart';
@@ -81,17 +84,181 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const netMarginPercent = totalTreatmentFee > 0 ? (netMargin / totalTreatmentFee) * 100 : 0;
   const avgLabCost = totalPatients > 0 ? totalLabCost / totalPatients : 0;
 
-  // Denture type breakdown
-  const typeCounts: Record<string, number> = {};
-  filteredRecords.forEach(r => {
-    let t = r.dentureType || 'อื่นๆ';
-    if (t.includes('CD')) t = 'CD (ทั้งปาก)';
-    else if (t.includes('APD')) t = 'APD (บางส่วน)';
-    else if (t.includes('UTP') || t.includes('LTP') || t.includes('USD')) t = 'UTP/LTP';
-    else if (t.includes('ซ่อม')) t = 'ซ่อมฟันปลอม';
-    else t = 'อื่นๆ';
-    typeCounts[t] = (typeCounts[t] || 0) + 1;
-  });
+  // Comprehensive Denture type breakdown with lab cost, pieces, and percentage metrics
+  const dentureTypeStats = useMemo(() => {
+    interface DentureTypeGroup {
+      id: string;
+      code: string;
+      title: string;
+      subtitle: string;
+      colorClass: string;
+      barGradient: string;
+      badgeClass: string;
+      count: number;
+      percentage: number;
+      totalLabCost: number;
+      upperCount: number;
+      lowerCount: number;
+      bothCount: number;
+      repairCount: number;
+    }
+
+    const groups: Record<string, DentureTypeGroup> = {
+      cd: {
+        id: 'cd',
+        code: 'CD',
+        title: 'CD (ฟันเทียมทั้งปาก)',
+        subtitle: 'Complete Denture - ฟันปลอมทั้งปาก',
+        colorClass: 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60',
+        barGradient: 'from-blue-600 to-indigo-600',
+        badgeClass: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
+        count: 0,
+        percentage: 0,
+        totalLabCost: 0,
+        upperCount: 0,
+        lowerCount: 0,
+        bothCount: 0,
+        repairCount: 0
+      },
+      apd: {
+        id: 'apd',
+        code: 'APD',
+        title: 'APD (ฟันเทียมถอดได้ฐานพลาสติก)',
+        subtitle: 'Acrylic Partial Denture - ถอดได้บางส่วนเรซิน',
+        colorClass: 'text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/60',
+        barGradient: 'from-sky-500 to-cyan-500',
+        badgeClass: 'bg-sky-100 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border-sky-200 dark:border-sky-800',
+        count: 0,
+        percentage: 0,
+        totalLabCost: 0,
+        upperCount: 0,
+        lowerCount: 0,
+        bothCount: 0,
+        repairCount: 0
+      },
+      combined: {
+        id: 'combined',
+        code: 'CD/APD',
+        title: 'CD/APD (ขากรรไกรผสม)',
+        subtitle: 'หนึ่งขากรรไกรทั้งปาก อีกขากรรไกรบางส่วน',
+        colorClass: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60',
+        barGradient: 'from-purple-600 to-violet-500',
+        badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border-purple-200 dark:border-purple-800',
+        count: 0,
+        percentage: 0,
+        totalLabCost: 0,
+        upperCount: 0,
+        lowerCount: 0,
+        bothCount: 0,
+        repairCount: 0
+      },
+      tp: {
+        id: 'tp',
+        code: 'TP',
+        title: 'TP / UTP / LTP (ฟันเทียมชั่วคราว)',
+        subtitle: 'Transitional / Temporary Denture',
+        colorClass: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60',
+        barGradient: 'from-amber-500 to-orange-500',
+        badgeClass: 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+        count: 0,
+        percentage: 0,
+        totalLabCost: 0,
+        upperCount: 0,
+        lowerCount: 0,
+        bothCount: 0,
+        repairCount: 0
+      },
+      rpd: {
+        id: 'rpd',
+        code: 'RPD',
+        title: 'RPD (ฟันเทียมโครงโลหะ)',
+        subtitle: 'Cast Metal Frame - แข็งแรงทนทาน',
+        colorClass: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60',
+        barGradient: 'from-emerald-500 to-teal-600',
+        badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
+        count: 0,
+        percentage: 0,
+        totalLabCost: 0,
+        upperCount: 0,
+        lowerCount: 0,
+        bothCount: 0,
+        repairCount: 0
+      },
+      repair: {
+        id: 'repair',
+        code: 'ซ่อม',
+        title: 'งานซ่อมฟันปลอม / เสริมฐาน (Repair)',
+        subtitle: 'ซ่อมฐานหัก, เติมซี่ฟัน, เสริมฐาน (Reline)',
+        colorClass: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60',
+        barGradient: 'from-rose-500 to-pink-600',
+        badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border-rose-200 dark:border-rose-800',
+        count: 0,
+        percentage: 0,
+        totalLabCost: 0,
+        upperCount: 0,
+        lowerCount: 0,
+        bothCount: 0,
+        repairCount: 0
+      },
+      other: {
+        id: 'other',
+        code: 'อื่นๆ',
+        title: 'งานทันตกรรมประดิษฐ์อื่นๆ',
+        subtitle: 'Other Prosthetic Procedures',
+        colorClass: 'text-zinc-600 dark:text-zinc-400 bg-zinc-100 dark:bg-zinc-800',
+        barGradient: 'from-zinc-500 to-slate-600',
+        badgeClass: 'bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700',
+        count: 0,
+        percentage: 0,
+        totalLabCost: 0,
+        upperCount: 0,
+        lowerCount: 0,
+        bothCount: 0,
+        repairCount: 0
+      }
+    };
+
+    filteredRecords.forEach(r => {
+      const typeStr = (r.dentureType || '').trim().toUpperCase();
+      let key = 'other';
+      if ((typeStr.includes('CD') && typeStr.includes('APD')) || (typeStr.includes('CD') && typeStr.includes('TP'))) {
+        key = 'combined';
+      } else if (typeStr.includes('CD') || typeStr.includes('ทั้งปาก') || typeStr.includes('COMPLETE')) {
+        key = 'cd';
+      } else if (typeStr.includes('APD') || typeStr.includes('บางส่วน') || typeStr.includes('PARTIAL')) {
+        key = 'apd';
+      } else if (typeStr.includes('TP') || typeStr.includes('UTP') || typeStr.includes('LTP') || typeStr.includes('USD') || typeStr.includes('ชั่วคราว')) {
+        key = 'tp';
+      } else if (typeStr.includes('RPD') || typeStr.includes('โลหะ') || typeStr.includes('CAST')) {
+        key = 'rpd';
+      } else if (typeStr.includes('ซ่อม') || typeStr.includes('REPAIR') || typeStr.includes('RELINE') || typeStr.includes('เติม')) {
+        key = 'repair';
+      } else {
+        key = 'other';
+      }
+
+      const grp = groups[key];
+      grp.count += 1;
+      grp.totalLabCost += (r.labCost || 0);
+
+      if (typeStr.includes('/') || typeStr.includes('บน-ล่าง') || typeStr.includes('บนและล่าง') || typeStr === 'CD/CD' || typeStr === 'APD/APD') {
+        grp.bothCount += 1;
+      } else if (typeStr.startsWith('U') || typeStr.includes('บน') || typeStr.endsWith('/-')) {
+        grp.upperCount += 1;
+      } else if (typeStr.startsWith('L') || typeStr.includes('ล่าง') || typeStr.startsWith('-/')) {
+        grp.lowerCount += 1;
+      } else if (key === 'repair') {
+        grp.repairCount += 1;
+      }
+    });
+
+    const activeList = Object.values(groups).map(g => ({
+      ...g,
+      percentage: totalPatients > 0 ? Math.round((g.count / totalPatients) * 100) : 0
+    }));
+
+    return activeList.filter(g => g.count > 0 || ['cd', 'apd', 'combined', 'tp', 'repair'].includes(g.id));
+  }, [filteredRecords, totalPatients]);
 
   // Dynamic Doctor breakdown: automatically adapts to the selected year & dataset
   const doctorStats = useMemo(() => {
@@ -543,8 +710,193 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Yearly Comparative Bar Chart (4 Years: 2566 - 2569) */}
-      <YearlyComparisonBarChart records={records} isPdpaMode={isPdpaMode} />
+      {/* Two Column Grid: Denture Types & Coverage Distribution (Prominent Top Position) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Denture Types Breakdown (Card upgraded with rich breakdown & lab cost) */}
+        <div className="p-6 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+                <Layers className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center space-x-2">
+                  <span>จำแนกตามประเภทฟันปลอม</span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
+                    {totalPatients} เคส
+                  </span>
+                </h3>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  CD ทั้งปาก • APD บางส่วน • CD/APD ผสม • TP ชั่วคราว • RPD โครงโลหะ • ซ่อมแซม
+                </p>
+              </div>
+            </div>
+            <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium shrink-0">
+              {dentureTypeStats.length} หมวด
+            </span>
+          </div>
+
+          <div className="space-y-3.5">
+            {dentureTypeStats.map((group) => {
+              const hasPositions = group.bothCount > 0 || group.upperCount > 0 || group.lowerCount > 0 || group.repairCount > 0;
+              return (
+                <div 
+                  key={group.id} 
+                  className="p-3.5 rounded-2xl bg-zinc-50/80 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition-all duration-150 space-y-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <span className={`px-2 py-0.5 rounded-lg text-xs font-bold border shrink-0 ${group.badgeClass}`}>
+                        {group.code}
+                      </span>
+                      <div className="truncate">
+                        <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                          {group.title}
+                        </h4>
+                        <p className="text-[10px] text-zinc-400 truncate">
+                          {group.subtitle}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div className="flex items-baseline justify-end space-x-1.5">
+                        <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                          {group.count} ราย
+                        </span>
+                        <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">
+                          ({group.percentage}%)
+                        </span>
+                      </div>
+                      {group.totalLabCost > 0 && (
+                        <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                          ค่าแลป ฿{group.totalLabCost.toLocaleString('th-TH', { maximumFractionDigits: 0 })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Enhanced Progress Bar */}
+                  <div className="w-full bg-zinc-200/70 dark:bg-zinc-700/60 h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full bg-gradient-to-r ${group.barGradient} transition-all duration-300`}
+                      style={{ width: `${Math.max(group.percentage, group.count > 0 ? 6 : 0)}%` }}
+                    />
+                  </div>
+
+                  {/* Sub-position Chips Breakdown */}
+                  {hasPositions && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      {group.bothCount > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300">
+                          <span>บนและล่าง (2 ชิ้น):</span>
+                          <span className="font-bold ml-1 text-zinc-900 dark:text-zinc-100">{group.bothCount}</span>
+                        </span>
+                      )}
+                      {group.upperCount > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300">
+                          <span>บน (Upper):</span>
+                          <span className="font-bold ml-1 text-zinc-900 dark:text-zinc-100">{group.upperCount}</span>
+                        </span>
+                      )}
+                      {group.lowerCount > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300">
+                          <span>ล่าง (Lower):</span>
+                          <span className="font-bold ml-1 text-zinc-900 dark:text-zinc-100">{group.lowerCount}</span>
+                        </span>
+                      )}
+                      {group.repairCount > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300">
+                          <span>งานซ่อม:</span>
+                          <span className="font-bold ml-1 text-rose-600 dark:text-rose-400">{group.repairCount}</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Coverage Types Breakdown (7 Categorized Groups) */}
+        <div className="p-6 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                  สิทธิการรักษาพยาบาล (7 หมวดสิทธิ)
+                </h3>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  UC • จ่ายตรง • พรบ. • ชำระเอง • เบิกต้นสังกัด • ประกันสังคม • อื่นๆ
+                </p>
+              </div>
+            </div>
+            <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium shrink-0">
+              7 หมวดหมู่
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {coverageStats.map((group, idx) => {
+              const hasSubItems = Object.keys(group.subItemsMap).length > 0;
+              return (
+                <div key={group.id} className="p-3 rounded-2xl bg-zinc-50/80 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${group.badgeClass}`}>
+                        {idx + 1}. {group.name}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                        {group.count} ราย
+                      </span>
+                      <span className="text-[11px] text-zinc-400 ml-1.5">
+                        ({group.percentage}%)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="w-full bg-zinc-200/60 dark:bg-zinc-700/60 h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        idx === 0 ? 'bg-emerald-500' :
+                        idx === 1 ? 'bg-blue-500' :
+                        idx === 2 ? 'bg-purple-500' :
+                        idx === 3 ? 'bg-amber-500' : 'bg-zinc-500'
+                      }`}
+                      style={{ width: `${Math.max(group.percentage, group.count > 0 ? 5 : 0)}%` }}
+                    />
+                  </div>
+
+                  {/* Sub-item badges */}
+                  {hasSubItems ? (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {Object.entries(group.subItemsMap).map(([subName, count]) => (
+                        <span
+                          key={subName}
+                          className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 font-medium"
+                        >
+                          <span>{subName}</span>
+                          <span className="font-bold text-zinc-900 dark:text-zinc-200">({count})</span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-zinc-400 italic">ยังไม่มีผู้ป่วยในสิทธินี้</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+      </div>
 
       {/* Dentists Workload Section (Dynamic) */}
       <div className="space-y-3">
@@ -616,114 +968,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Two Column Grid: Denture Types & Coverage Distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* Denture Types Breakdown */}
-        <div className="p-6 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-              จำแนกตามประเภทฟันปลอม
-            </h3>
-            <span className="text-xs text-zinc-400">
-              {Object.keys(typeCounts).length} ประเภท
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {Object.entries(typeCounts).map(([type, count]) => {
-              const pct = totalPatients > 0 ? Math.round((count / totalPatients) * 100) : 0;
-              return (
-                <div key={type} className="space-y-1">
-                  <div className="flex justify-between text-xs font-medium">
-                    <span className="text-zinc-700 dark:text-zinc-300">{type}</span>
-                    <span className="text-zinc-500 dark:text-zinc-400">{count} ราย ({pct}%)</span>
-                  </div>
-                  <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-2 rounded-full overflow-hidden">
-                    <div
-                      className="bg-blue-600 h-full rounded-full transition-all duration-300"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Coverage Types Breakdown (7 Categorized Groups) */}
-        <div className="p-6 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-            <div>
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                สิทธิการรักษาพยาบาล (7 หมวดสิทธิ)
-              </h3>
-              <p className="text-[11px] text-zinc-400 mt-0.5">
-                UC • จ่ายตรง • พรบ. • ชำระเอง • เบิกต้นสังกัด/รัฐวิสาหกิจ • ประกันสังคม • อื่นๆ
-              </p>
-            </div>
-            <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 font-medium">
-              7 หมวดหมู่
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {coverageStats.map((group, idx) => {
-              const hasSubItems = Object.keys(group.subItemsMap).length > 0;
-              return (
-                <div key={group.id} className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold border ${group.badgeClass}`}>
-                        {idx + 1}. {group.name}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                        {group.count} ราย
-                      </span>
-                      <span className="text-[11px] text-zinc-400 ml-1.5">
-                        ({group.percentage}%)
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="w-full bg-zinc-200/60 dark:bg-zinc-700/60 h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        idx === 0 ? 'bg-emerald-500' :
-                        idx === 1 ? 'bg-blue-500' :
-                        idx === 2 ? 'bg-purple-500' :
-                        idx === 3 ? 'bg-amber-500' : 'bg-zinc-500'
-                      }`}
-                      style={{ width: `${Math.max(group.percentage, group.count > 0 ? 5 : 0)}%` }}
-                    />
-                  </div>
-
-                  {/* Sub-item badges */}
-                  {hasSubItems ? (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {Object.entries(group.subItemsMap).map(([subName, count]) => (
-                        <span
-                          key={subName}
-                          className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 font-medium"
-                        >
-                          <span>{subName}</span>
-                          <span className="font-bold text-zinc-900 dark:text-zinc-200">({count})</span>
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-[10px] text-zinc-400 italic">ยังไม่มีผู้ป่วยในสิทธินี้</p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
       </div>
 
       {/* Recent Activity & Latest Scans */}

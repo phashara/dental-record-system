@@ -334,19 +334,21 @@ export const YearlyComparisonBarChart: React.FC<YearlyComparisonBarChartProps> =
                   </div>
 
                   {/* 4 Vertical Bars comparing rights in this year */}
-                  <div className="h-40 flex items-end justify-around gap-2 pt-4 pb-2 border-b border-zinc-200/60 dark:border-zinc-700/60">
+                  <div className="h-44 flex items-end justify-around gap-2 pt-4 pb-2 border-b border-zinc-200/60 dark:border-zinc-700/60">
                     
                     {/* UC Bar */}
                     <div className="flex-1 flex flex-col items-center h-full justify-end group">
                       <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 mb-1 opacity-90 group-hover:scale-110 transition-transform">
                         {y.coverageCounts.uc}
                       </span>
-                      <div 
-                        style={{ height: `${Math.max(ucPct * 1.2, y.coverageCounts.uc > 0 ? 8 : 2)}%` }}
-                        className="w-full bg-emerald-500 rounded-t-lg transition-all duration-300 group-hover:bg-emerald-400"
-                        title={`UC บัตรทอง: ${y.coverageCounts.uc} ราย (${ucPct.toFixed(1)}%)`}
-                      />
-                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mt-1">
+                      <div className="w-full bg-emerald-50 dark:bg-emerald-950/40 rounded-xl h-full flex flex-col justify-end p-0.5">
+                        <div 
+                          style={{ height: `${Math.max(ucPct, y.coverageCounts.uc > 0 ? 10 : 3)}%` }}
+                          className="w-full bg-gradient-to-t from-emerald-600 to-emerald-400 rounded-lg shadow-xs transition-all duration-300 group-hover:brightness-110"
+                          title={`UC บัตรทอง: ${y.coverageCounts.uc} ราย (${ucPct.toFixed(1)}%)`}
+                        />
+                      </div>
+                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mt-1.5">
                         UC
                       </span>
                     </div>
@@ -356,12 +358,14 @@ export const YearlyComparisonBarChart: React.FC<YearlyComparisonBarChartProps> =
                       <span className="text-[10px] font-bold text-blue-700 dark:text-blue-400 mb-1 opacity-90 group-hover:scale-110 transition-transform">
                         {y.coverageCounts.direct}
                       </span>
-                      <div 
-                        style={{ height: `${Math.max(directPct * 1.2, y.coverageCounts.direct > 0 ? 8 : 2)}%` }}
-                        className="w-full bg-blue-500 rounded-t-lg transition-all duration-300 group-hover:bg-blue-400"
-                        title={`สิทธิจ่ายตรง: ${y.coverageCounts.direct} ราย (${directPct.toFixed(1)}%)`}
-                      />
-                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mt-1">
+                      <div className="w-full bg-blue-50 dark:bg-blue-950/40 rounded-xl h-full flex flex-col justify-end p-0.5">
+                        <div 
+                          style={{ height: `${Math.max(directPct, y.coverageCounts.direct > 0 ? 10 : 3)}%` }}
+                          className="w-full bg-gradient-to-t from-blue-600 to-sky-400 rounded-lg shadow-xs transition-all duration-300 group-hover:brightness-110"
+                          title={`สิทธิจ่ายตรง: ${y.coverageCounts.direct} ราย (${directPct.toFixed(1)}%)`}
+                        />
+                      </div>
+                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mt-1.5">
                         ตรง
                       </span>
                     </div>
@@ -371,12 +375,14 @@ export const YearlyComparisonBarChart: React.FC<YearlyComparisonBarChartProps> =
                       <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 opacity-90 group-hover:scale-110 transition-transform">
                         {y.coverageCounts.self}
                       </span>
-                      <div 
-                        style={{ height: `${Math.max(selfPct * 1.2, y.coverageCounts.self > 0 ? 8 : 2)}%` }}
-                        className="w-full bg-amber-500 rounded-t-lg transition-all duration-300 group-hover:bg-amber-400"
-                        title={`ชำระเงินเอง: ${y.coverageCounts.self} ราย (${selfPct.toFixed(1)}%)`}
-                      />
-                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mt-1">
+                      <div className="w-full bg-amber-50 dark:bg-amber-950/40 rounded-xl h-full flex flex-col justify-end p-0.5">
+                        <div 
+                          style={{ height: `${Math.max(selfPct, y.coverageCounts.self > 0 ? 10 : 3)}%` }}
+                          className="w-full bg-gradient-to-t from-amber-600 to-amber-400 rounded-lg shadow-xs transition-all duration-300 group-hover:brightness-110"
+                          title={`ชำระเงินเอง: ${y.coverageCounts.self} ราย (${selfPct.toFixed(1)}%)`}
+                        />
+                      </div>
+                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mt-1.5">
                         สด
                       </span>
                     </div>
@@ -386,12 +392,14 @@ export const YearlyComparisonBarChart: React.FC<YearlyComparisonBarChartProps> =
                       <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 mb-1 opacity-90 group-hover:scale-110 transition-transform">
                         {y.coverageCounts.social + y.coverageCounts.act + y.coverageCounts.other}
                       </span>
-                      <div 
-                        style={{ height: `${Math.max(otherPct * 1.2, (y.coverageCounts.social + y.coverageCounts.act + y.coverageCounts.other) > 0 ? 8 : 2)}%` }}
-                        className="w-full bg-purple-500 rounded-t-lg transition-all duration-300 group-hover:bg-purple-400"
-                        title={`อื่นๆ: ${y.coverageCounts.social + y.coverageCounts.act + y.coverageCounts.other} ราย (${otherPct.toFixed(1)}%)`}
-                      />
-                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mt-1">
+                      <div className="w-full bg-purple-50 dark:bg-purple-950/40 rounded-xl h-full flex flex-col justify-end p-0.5">
+                        <div 
+                          style={{ height: `${Math.max(otherPct, (y.coverageCounts.social + y.coverageCounts.act + y.coverageCounts.other) > 0 ? 10 : 3)}%` }}
+                          className="w-full bg-gradient-to-t from-purple-600 to-pink-400 rounded-lg shadow-xs transition-all duration-300 group-hover:brightness-110"
+                          title={`อื่นๆ: ${y.coverageCounts.social + y.coverageCounts.act + y.coverageCounts.other} ราย (${otherPct.toFixed(1)}%)`}
+                        />
+                      </div>
+                      <span className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mt-1.5">
                         อื่น
                       </span>
                     </div>
@@ -464,31 +472,40 @@ export const YearlyComparisonBarChart: React.FC<YearlyComparisonBarChartProps> =
             </span>
           </div>
 
-          <div className="h-56 flex items-end justify-between gap-4 sm:gap-8 px-4 sm:px-12 pt-6 pb-2 border-b border-zinc-100 dark:border-zinc-800">
+          <div className="relative h-64 flex items-end justify-between gap-4 sm:gap-8 px-4 sm:px-12 pt-8 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+            {/* Horizontal guide lines */}
+            <div className="absolute inset-x-4 sm:inset-x-12 top-8 bottom-10 flex flex-col justify-between pointer-events-none opacity-40">
+              <div className="border-b border-dashed border-zinc-200 dark:border-zinc-700 w-full" />
+              <div className="border-b border-dashed border-zinc-200 dark:border-zinc-700 w-full" />
+              <div className="border-b border-dashed border-zinc-200 dark:border-zinc-700 w-full" />
+            </div>
+
             {yearsData.map((y, idx) => {
               const heightPct = (y.totalCases / maxCases) * 100;
               const prev = idx > 0 ? yearsData[idx - 1] : null;
               const growth = prev && prev.totalCases > 0 ? ((y.totalCases - prev.totalCases) / prev.totalCases) * 100 : null;
 
               return (
-                <div key={y.yearBE} className="flex-1 flex flex-col items-center h-full justify-end group">
+                <div key={y.yearBE} className="relative z-10 flex-1 flex flex-col items-center h-full justify-end group">
                   <div className="text-center mb-2">
                     <span className="text-sm sm:text-base font-extrabold text-blue-600 dark:text-blue-400 block group-hover:scale-110 transition-transform">
                       {y.totalCases} เคส
                     </span>
                     {growth !== null && (
-                      <span className={`text-[10px] font-bold ${growth >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      <span className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-bold ${growth >= 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-50 text-rose-500 dark:bg-rose-950/60 dark:text-rose-300'}`}>
                         {growth >= 0 ? '+' : ''}{growth.toFixed(0)}% YoY
                       </span>
                     )}
                   </div>
 
-                  <div 
-                    style={{ height: `${Math.max(heightPct, 8)}%` }}
-                    className="w-full max-w-[80px] bg-gradient-to-t from-blue-600 to-sky-400 hover:from-blue-500 hover:to-sky-300 rounded-t-2xl shadow-md transition-all duration-300"
-                  />
+                  <div className="w-full max-w-[80px] bg-blue-50/70 dark:bg-blue-950/30 rounded-2xl h-full flex flex-col justify-end p-1">
+                    <div 
+                      style={{ height: `${Math.max(heightPct, 10)}%` }}
+                      className="w-full bg-gradient-to-t from-blue-600 via-indigo-600 to-sky-400 hover:from-blue-500 hover:to-sky-300 rounded-xl shadow-md transition-all duration-300"
+                    />
+                  </div>
 
-                  <span className="text-xs sm:text-sm font-bold text-zinc-800 dark:text-zinc-200 mt-2">
+                  <span className="text-xs sm:text-sm font-bold text-zinc-800 dark:text-zinc-200 mt-2.5">
                     ปี {y.yearBE}
                   </span>
                 </div>
