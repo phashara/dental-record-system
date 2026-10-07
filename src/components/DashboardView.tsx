@@ -20,7 +20,21 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { DentureRecord, DOCTORS_LIST, COVERAGE_CATEGORIES, resolveCoverage, maskPatientName, maskHN, normalizeDoctorName, normalizeRecordDate, getYearBE } from '../types';
-import { YearlyComparisonBarChart } from './YearlyComparisonBarChart';
+
+export const THAI_MONTH_NAMES: Record<string, { short: string; full: string }> = {
+  '01': { short: 'ม.ค.', full: 'มกราคม' },
+  '02': { short: 'ก.พ.', full: 'กุมภาพันธ์' },
+  '03': { short: 'มี.ค.', full: 'มีนาคม' },
+  '04': { short: 'เม.ย.', full: 'เมษายน' },
+  '05': { short: 'พ.ค.', full: 'พฤษภาคม' },
+  '06': { short: 'มิ.ย.', full: 'มิถุนายน' },
+  '07': { short: 'ก.ค.', full: 'กรกฎาคม' },
+  '08': { short: 'ส.ค.', full: 'สิงหาคม' },
+  '09': { short: 'ก.ย.', full: 'กันยายน' },
+  '10': { short: 'ต.ค.', full: 'ตุลาคม' },
+  '11': { short: 'พ.ย.', full: 'พฤศจิกายน' },
+  '12': { short: 'ธ.ค.', full: 'ธันวาคม' },
+};
 
 interface DashboardViewProps {
   records: DentureRecord[];
@@ -41,30 +55,78 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateToTrends,
   isPdpaMode = false,
 }) => {
-  // Date / Time Range Filter States
-  const [timeFilter, setTimeFilter] = useState<'all' | '2566' | '2567' | '2568' | '2569' | 'custom'>('all');
+  // Dynamically determine current Buddhist Year (e.g. 2569) and Month (e.g. '10' for October)
+  const currentPeriod = useMemo(() => {
+    const d = new Date();
+    let year = d.getFullYear();
+    if (year < 2400) {
+      year += 543;
+    }
+    const beYear = String(year);
+    const monthPad = String(d.getMonth() + 1).padStart(2, '0');
+    return {
+      beYear,
+      month: monthPad,
+    };
+  }, []);
+
+  // Date / Time Range Filter States - Defaults to "แบบ 2" (Current Year & Current Month)
+  const [timeFilter, setTimeFilter] = useState<string>(currentPeriod.beYear);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
-  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentPeriod.month);
 
-  // Filter records based on selected date/time range
+  // Active filter readable label in Thai
+  const activeFilterLabel = useMemo(() => {
+    if (timeFilter === 'all' && selectedMonth === 'all') {
+      return 'ทั้งหมดทุกช่วงเวลา';
+    }
+    const isCurrent = timeFilter === currentPeriod.beYear && selectedMonth === currentPeriod.month;
+    const monthName = selectedMonth !== 'all' ? (THAI_MONTH_NAMES[selectedMonth]?.full || selectedMonth) : '';
+
+    if (timeFilter === 'custom') {
+      if (startDate && endDate) return `ช่วงวันที่ ${startDate} ถึง ${endDate}`;
+      if (startDate) return `ตั้งแต่วันที่ ${startDate}`;
+      if (endDate) return `ถึงวันที่ ${endDate}`;
+      return 'กำหนดช่วงวันเอง';
+    }
+
+    if (isCurrent) {
+      return `เดือน${monthName} ${currentPeriod.beYear} (เดือนและปีปัจจุบัน - แบบ 2)`;
+    }
+
+    if (timeFilter !== 'all' && selectedMonth !== 'all') {
+      return `เดือน${monthName} ${timeFilter}`;
+    }
+
+    if (timeFilter !== 'all') {
+      return `ปี ${timeFilter} (ทุกเดือน)`;
+    }
+
+    if (selectedMonth !== 'all') {
+      return `เดือน${monthName} (ทุกปี)`;
+    }
+
+    return 'ตัวกรองที่เลือก';
+  }, [timeFilter, selectedMonth, currentPeriod, startDate, endDate]);
+
+  // Filter records based on selected date/time range (Client-side view only, never modifies DB)
   const filteredRecords = useMemo(() => {
     return records.filter(r => {
-      if (!r.date) return true;
+      // If showing everything, include all records (even those without dates)
+      if (timeFilter === 'all' && selectedMonth === 'all') {
+        return true;
+      }
+
+      if (!r.date) return false;
       const normDate = normalizeRecordDate(r.date);
       const beYear = getYearBE(r.date);
 
-      if (timeFilter === '2566') {
-        if (beYear !== '2566') return false;
-      } else if (timeFilter === '2567') {
-        if (beYear !== '2567') return false;
-      } else if (timeFilter === '2568') {
-        if (beYear !== '2568') return false;
-      } else if (timeFilter === '2569') {
-        if (beYear !== '2569') return false;
-      } else if (timeFilter === 'custom') {
+      if (timeFilter === 'custom') {
         if (startDate && normDate < startDate) return false;
         if (endDate && normDate > endDate) return false;
+      } else if (timeFilter !== 'all') {
+        if (beYear !== timeFilter) return false;
       }
 
       if (selectedMonth !== 'all') {
@@ -408,28 +470,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* Date / Time Range Filter Card (ปรับ FILL ตามวันเวลาที่เลือกได้) */}
       <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-9 h-9 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
               <Calendar className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center space-x-2">
-                <span>กรองข้อมูลตามวันเวลา (Date Range Filter)</span>
+              <div className="flex items-center space-x-2">
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                  กรองข้อมูลตามวันเวลา (Date Range Filter)
+                </h3>
                 {isFilterActive && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
                     กำลังกรอง
                   </span>
                 )}
-              </h3>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                เลือกช่วงเวลาที่ต้องการดูข้อมูลสถิติ ค่าใช้จ่าย LAB และผลการให้บริการ
+              </div>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 flex flex-wrap items-center gap-1.5">
+                <span>📍 กำลังแสดง:</span>
+                <span className="font-semibold text-blue-600 dark:text-blue-400">
+                  {activeFilterLabel}
+                </span>
               </p>
             </div>
           </div>
 
           <div className="flex items-center space-x-2">
             <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-              พบ {totalPatients.toLocaleString('th-TH')} เคส (จาก {records.length.toLocaleString('th-TH')})
+              พบ {totalPatients.toLocaleString('th-TH')} เคส (จากทั้งหมด {records.length.toLocaleString('th-TH')} เคสในระบบ)
             </span>
             {isFilterActive && (
               <button
@@ -446,8 +513,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {/* Preset Year & Mode Pills */}
         <div className="flex flex-wrap items-center gap-1.5">
+          {/* Quick แบบ 2 button: Current Month & Current Year */}
           <button
-            onClick={() => { setTimeFilter('all'); setSelectedMonth('all'); }}
+            onClick={() => {
+              setTimeFilter(currentPeriod.beYear);
+              setSelectedMonth(currentPeriod.month);
+              setStartDate('');
+              setEndDate('');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 ${
+              timeFilter === currentPeriod.beYear && selectedMonth === currentPeriod.month
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200/60 dark:border-blue-800/60'
+            }`}
+            title="ตั้งค่าเริ่มต้น: เดือนและปีปัจจุบัน (แบบ 2)"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>เดือนปัจจุบัน (ต.ค. {currentPeriod.beYear})</span>
+          </button>
+
+          <button
+            onClick={() => { setTimeFilter('all'); setSelectedMonth('all'); setStartDate(''); setEndDate(''); }}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
               timeFilter === 'all' && selectedMonth === 'all'
                 ? 'bg-blue-600 text-white shadow-xs'
@@ -456,30 +542,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           >
             ทั้งหมดทุกช่วงเวลา
           </button>
+
           <button
-            onClick={() => setTimeFilter('2566')}
+            onClick={() => { setTimeFilter('2569'); setSelectedMonth('all'); }}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              timeFilter === '2566'
+              timeFilter === '2569' && selectedMonth === 'all'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
             }`}
           >
-            ปี 2566 (2023)
+            ปี 2569 (2026)
           </button>
           <button
-            onClick={() => setTimeFilter('2567')}
+            onClick={() => { setTimeFilter('2568'); setSelectedMonth('all'); }}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              timeFilter === '2567'
-                ? 'bg-blue-600 text-white shadow-xs'
-                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-            }`}
-          >
-            ปี 2567 (2024)
-          </button>
-          <button
-            onClick={() => setTimeFilter('2568')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              timeFilter === '2568'
+              timeFilter === '2568' && selectedMonth === 'all'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
             }`}
@@ -487,14 +564,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             ปี 2568 (2025)
           </button>
           <button
-            onClick={() => setTimeFilter('2569')}
+            onClick={() => { setTimeFilter('2567'); setSelectedMonth('all'); }}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-              timeFilter === '2569'
+              timeFilter === '2567' && selectedMonth === 'all'
                 ? 'bg-blue-600 text-white shadow-xs'
                 : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
             }`}
           >
-            ปี 2569 (2026)
+            ปี 2567 (2024)
+          </button>
+          <button
+            onClick={() => { setTimeFilter('2566'); setSelectedMonth('all'); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              timeFilter === '2566' && selectedMonth === 'all'
+                ? 'bg-blue-600 text-white shadow-xs'
+                : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+            }`}
+          >
+            ปี 2566 (2023)
           </button>
           <button
             onClick={() => setTimeFilter('custom')}
@@ -542,7 +629,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               onClick={() => setSelectedMonth(m.key)}
               className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all ${
                 selectedMonth === m.key
-                  ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-xs'
+                  ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 shadow-xs font-bold'
                   : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
               }`}
             >
@@ -575,6 +662,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Reassuring zero-case notice for current filtered period */}
+      {filteredRecords.length === 0 && records.length > 0 && (
+        <div className="p-4 rounded-2xl bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200 animate-in fade-in">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+              <Clock className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="font-bold">
+                ยังไม่มีรายการเคสใน {activeFilterLabel}
+              </p>
+              <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80 mt-0.5">
+                (ข้อมูลในฐานข้อมูลปลอดภัยครบถ้วน มีทั้งหมด {records.length.toLocaleString('th-TH')} เคส)
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => { setTimeFilter(currentPeriod.beYear); setSelectedMonth('all'); }}
+              className="px-3 py-1.5 rounded-xl bg-amber-200/70 hover:bg-amber-200 text-amber-900 font-semibold transition-colors"
+            >
+              ดูทั้งปี {currentPeriod.beYear}
+            </button>
+            <button
+              onClick={resetTimeFilter}
+              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold transition-colors shadow-xs"
+            >
+              ดูทั้งหมด ({records.length} เคส)
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Primary Key Metrics Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
@@ -980,49 +1100,66 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-          {recentRecords.map(r => (
-            <div
-              key={r.id}
-              onClick={() => onViewRecord(r)}
-              className="py-3.5 flex items-center justify-between hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 px-2 rounded-xl cursor-pointer transition-colors"
-            >
-              <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs font-bold">
-                  {normalizeDoctorName(r.doctor)?.charAt(0) || 'ฟ'}
-                </div>
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                      {isPdpaMode ? maskPatientName(r.patientName) : r.patientName}
-                    </h4>
-                    {isPdpaMode && (
-                      <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
-                        PDPA
+          {recentRecords.length > 0 ? (
+            recentRecords.map(r => (
+              <div
+                key={r.id}
+                onClick={() => onViewRecord(r)}
+                className="py-3.5 flex items-center justify-between hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 px-2 rounded-xl cursor-pointer transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xs font-bold">
+                    {normalizeDoctorName(r.doctor)?.charAt(0) || 'ฟ'}
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                        {isPdpaMode ? maskPatientName(r.patientName) : r.patientName}
+                      </h4>
+                      {isPdpaMode && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
+                          PDPA
+                        </span>
+                      )}
+                      <span className="text-[11px] text-zinc-400">
+                        HN: {isPdpaMode ? maskHN(r.hn) : r.hn}
                       </span>
-                    )}
-                    <span className="text-[11px] text-zinc-400">
-                      HN: {isPdpaMode ? maskHN(r.hn) : r.hn}
+                    </div>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                      {r.dentureType} • ทันตแพทย์: {normalizeDoctorName(r.doctor)} • {r.date}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-right flex items-center space-x-3">
+                  <div>
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 block">
+                      แลป: ฿{r.labCost?.toLocaleString('th-TH') || '0'}
+                    </span>
+                    <span className="text-[10px] text-zinc-400">
+                      {r.coverage}
                     </span>
                   </div>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
-                    {r.dentureType} • ทันตแพทย์: {normalizeDoctorName(r.doctor)} • {r.date}
-                  </p>
+                  <ArrowRight className="w-4 h-4 text-zinc-300 dark:text-zinc-600" />
                 </div>
               </div>
-
-              <div className="text-right flex items-center space-x-3">
-                <div>
-                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 block">
-                    แลป: ฿{r.labCost?.toLocaleString('th-TH') || '0'}
-                  </span>
-                  <span className="text-[10px] text-zinc-400">
-                    {r.coverage}
-                  </span>
-                </div>
-                <ArrowRight className="w-4 h-4 text-zinc-300 dark:text-zinc-600" />
-              </div>
+            ))
+          ) : (
+            <div className="py-8 text-center space-y-2">
+              <p className="text-xs text-zinc-400">
+                ไม่พบรายการเคสในช่วงเวลานี้ ({activeFilterLabel})
+              </p>
+              {records.length > 0 && (
+                <button
+                  onClick={resetTimeFilter}
+                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>ดูข้อมูลทั้งหมดทุกช่วงเวลา ({records.length} เคส)</span>
+                </button>
+              )}
             </div>
-          ))}
+          )}
         </div>
       </div>
 
