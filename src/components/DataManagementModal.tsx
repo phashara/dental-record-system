@@ -30,7 +30,6 @@ interface DataManagementModalProps {
   onClose: () => void;
   records: DentureRecord[];
   onRecordsUpdated: () => void;
-  onOpenLockScreen: () => void;
   onOpenExcelImport?: () => void;
 }
 
@@ -39,7 +38,6 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
   onClose,
   records,
   onRecordsUpdated,
-  onOpenLockScreen,
   onOpenExcelImport,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'export' | 'denture_types' | 'backup' | 'reset'>('overview');
@@ -186,21 +184,6 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
     };
 
     reader.readAsText(file);
-  };
-
-  // Reset to Hospital Seed Data
-  const handleResetToHospitalSeed = async () => {
-    setIsProcessing(true);
-    try {
-      await dentureStorage.resetToHospitalOfficialData();
-      onRecordsUpdated();
-      setImportStatus('✅ โหลดข้อมูลเวชระเบียนย้อนหลังโรงพยาบาลพยุหะคีรี (274 รายการ พร้อมชื่อแพทย์เดิม) สำเร็จแล้ว');
-      setConfirmResetText('');
-    } catch (e) {
-      setImportStatus('❌ ไม่สามารถรีเซ็ตข้อมูลได้');
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   return (
@@ -379,28 +362,6 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
                     );
                   })}
                 </div>
-              </div>
-
-              {/* Quick Lock Action */}
-              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/40 flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center space-x-1.5">
-                    <Lock className="w-4 h-4" />
-                    <span>ล็อคหน้าจอทันทีเพื่อความปลอดภัย</span>
-                  </h4>
-                  <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                    ป้องกันผู้อื่นเห็นข้อมูลคนไข้เมื่อต้องลุกออกจากโต๊ะทำงาน (ปลดล็อคด้วยรหัส 0723)
-                  </p>
-                </div>
-                <button
-                  onClick={() => {
-                    onClose();
-                    onOpenLockScreen();
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors"
-                >
-                  ล็อคหน้าจอ
-                </button>
               </div>
 
             </div>
@@ -935,36 +896,6 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
                     <span>ยืนยันล้างข้อมูลเพื่อเริ่มใช้จริง</span>
                   </button>
                 </div>
-              </div>
-
-              {/* Restore Archived 274 Records */}
-              <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/60 space-y-2">
-                <h4 className="text-xs font-bold text-blue-900 dark:text-blue-200 flex items-center space-x-1.5">
-                  <RefreshCw className="w-4 h-4 text-blue-600" />
-                  <span>โหลดข้อมูลเวชระเบียนย้อนหลัง 274 เคส (Archive Reference)</span>
-                </h4>
-                <p className="text-xs text-blue-800/80 dark:text-blue-300 leading-relaxed">
-                  หากต้องการเรียกดูข้อมูลประวัติเดิม 274 รายการของโรงพยาบาลพยุหะคีรีเพื่อใช้อ้างอิงหรือเปรียบเทียบ สามารถกดโหลดกลับเข้าสู่ระบบได้ทันที
-                </p>
-                <button
-                  onClick={async () => {
-                    setIsProcessing(true);
-                    try {
-                      const res = await dentureStorage.restoreRetrospectiveArchive();
-                      onRecordsUpdated();
-                      setImportStatus(`✅ โหลดข้อมูลย้อนหลัง 274 เคสกลับเข้าสู่ระบบสำเร็จ (${res.length} รายการ)`);
-                    } catch (e) {
-                      setImportStatus('❌ ไม่สามารถโหลดข้อมูลย้อนหลังได้');
-                    } finally {
-                      setIsProcessing(false);
-                    }
-                  }}
-                  disabled={isProcessing}
-                  className="mt-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center space-x-2 transition-colors disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
-                  <span>โหลดข้อมูลย้อนหลัง 274 เคส (จากคลัง Archive)</span>
-                </button>
               </div>
 
             </div>

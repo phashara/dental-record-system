@@ -8,8 +8,6 @@ import { LabCostSummaryView } from './components/LabCostSummaryView';
 import { CameraScannerModal } from './components/CameraScannerModal';
 import { RecordDetailModal } from './components/RecordDetailModal';
 import { RecordFormModal } from './components/RecordFormModal';
-import { GitHubAndPrivacyModal } from './components/GitHubAndPrivacyModal';
-import { IPhoneLockScreen } from './components/IPhoneLockScreen';
 import { DataManagementModal } from './components/DataManagementModal';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { DentureRecord, ViewTab } from './types';
@@ -73,15 +71,6 @@ export default function App() {
     }
   });
 
-  // iPhone Style Passcode Lock (PIN 0723)
-  const [isLocked, setIsLocked] = useState<boolean>(() => {
-    try {
-      return safeGetStorage('session', 'denture_unlocked_0723') !== 'true';
-    } catch {
-      return false;
-    }
-  });
-
   // Data Management Modal State
   const [isDataManagementOpen, setIsDataManagementOpen] = useState<boolean>(false);
 
@@ -95,42 +84,9 @@ export default function App() {
     }
   });
 
-  // Font Family State
-  const [fontFamily, setFontFamily] = useState<'ios' | 'prompt' | 'ibm'>(() => {
-    try {
-      const saved = safeGetStorage('local', 'denture_font_family');
-      return (saved as 'ios' | 'prompt' | 'ibm') || 'ios';
-    } catch {
-      return 'ios';
-    }
-  });
-
-  useEffect(() => {
-    document.body.setAttribute('data-font', fontFamily);
-    safeSetStorage('local', 'denture_font_family', fontFamily);
-  }, [fontFamily]);
-
-  const handleChangeFontFamily = (font: 'ios' | 'prompt' | 'ibm') => {
-    setFontFamily(font);
-    const label = font === 'ios' ? '📱 iOS Modern (Apple SF / Sukhumvit)' : font === 'prompt' ? '🅰️ Prompt (โมเดิร์นคลีน)' : '💻 IBM Plex Sans Thai';
-    showToast(`✨ สลับรูปแบบฟอนต์เป็น: ${label}`);
-  };
-
-  const [isGitHubModalOpen, setIsGitHubModalOpen] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(dentureStorage.isOnline());
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const handleUnlock = () => {
-    safeSetStorage('session', 'denture_unlocked_0723', 'true');
-    setIsLocked(false);
-    showToast('🔓 ปลดล็อคระบบสำเร็จ ยินดีต้อนรับสู่ระบบทะเบียนฟันปลอม');
-  };
-
-  const handleLock = () => {
-    safeRemoveStorage('session', 'denture_unlocked_0723');
-    setIsLocked(true);
-  };
 
   const handleTogglePdpaMode = () => {
     setIsPdpaMode(prev => {
@@ -285,11 +241,7 @@ export default function App() {
         recordCount={records.length}
         isPdpaMode={isPdpaMode}
         onTogglePdpaMode={handleTogglePdpaMode}
-        onOpenGitHubModal={() => setIsGitHubModalOpen(true)}
         onOpenDataManagement={() => setIsDataManagementOpen(true)}
-        onLockScreen={handleLock}
-        fontFamily={fontFamily}
-        onChangeFontFamily={handleChangeFontFamily}
       />
 
       {/* Main Container Content */}
@@ -460,13 +412,6 @@ export default function App() {
         editingRecord={editingRecord}
       />
 
-      <GitHubAndPrivacyModal
-        isOpen={isGitHubModalOpen}
-        onClose={() => setIsGitHubModalOpen(false)}
-        isPdpaMode={isPdpaMode}
-        onTogglePdpaMode={handleTogglePdpaMode}
-      />
-
       {/* Hospital Data Management Center Modal */}
       <DataManagementModal
         isOpen={isDataManagementOpen}
@@ -476,7 +421,6 @@ export default function App() {
           const up = dentureStorage.getLocalRecords();
           setRecords(up);
         }}
-        onOpenLockScreen={handleLock}
         onOpenExcelImport={() => setIsExcelModalOpen(true)}
       />
 
@@ -495,9 +439,6 @@ export default function App() {
           }}
         />
       )}
-
-      {/* iPhone Passcode Lock Screen (Passcode: 0723) */}
-      <IPhoneLockScreen isLocked={isLocked} onUnlock={handleUnlock} />
     </div>
   );
 }

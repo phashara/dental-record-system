@@ -26,7 +26,6 @@ try {
 }
 
 const DB_FILE = path.join(DATA_DIR, 'denture_records.json');
-const ROOT_ARCHIVE_FILE = path.join(process.cwd(), 'data', 'denture_records_archive_274.json');
 
 // Doctors specified by user (5 dentists)
 export const DOCTORS = [
@@ -301,39 +300,6 @@ app.post('/api/records/clear', (req, res) => {
 app.post('/api/records/reset', (req, res) => {
   saveRecords([]);
   res.json({ success: true, records: [] });
-});
-
-// Restore retrospective 274 records from archive
-app.post('/api/records/restore-archive', (req, res) => {
-  const possiblePaths = [
-    ROOT_ARCHIVE_FILE,
-    path.join(DATA_DIR, 'denture_records_archive_274.json'),
-    path.join(process.cwd(), 'data', 'denture_records_archive_274.json'),
-  ];
-
-  let archivePath = possiblePaths.find(p => fs.existsSync(p));
-
-  if (archivePath) {
-    try {
-      const data = JSON.parse(fs.readFileSync(archivePath, 'utf-8'));
-      const list = Array.isArray(data) ? data : (data.records || []);
-      const normalized = list.map((r: any) => {
-        const norm = normalizeCoverage(r.coverage);
-        return {
-          ...r,
-          doctor: normalizeDoctor(r.doctor),
-          coverageGroup: r.coverageGroup || norm.group,
-          coverage: r.coverage || norm.subItem,
-        };
-      });
-      saveRecords(normalized);
-      res.json({ success: true, count: normalized.length, records: normalized });
-    } catch (e) {
-      res.status(500).json({ error: 'Failed to read archive file' });
-    }
-  } else {
-    res.status(404).json({ error: 'Archive file not found' });
-  }
 });
 
 // AI OCR Vision Endpoint

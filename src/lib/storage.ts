@@ -34,19 +34,6 @@ export class DentureStorageService {
 
   private constructor() {
     if (typeof window !== 'undefined') {
-      try {
-        // Clean legacy caches and stale offline queues that might re-upload deleted records
-        localStorage.removeItem('denture_records_cache_v1');
-        localStorage.removeItem('denture_records_cache_v2');
-        localStorage.removeItem('denture_records_cache_v3');
-        localStorage.removeItem('denture_records_cache_v4');
-        localStorage.removeItem('denture_records_cache_v5');
-        localStorage.removeItem('denture_offline_queue_v1');
-        localStorage.removeItem('denture_offline_queue_v2');
-        localStorage.removeItem('denture_offline_queue_v3');
-        localStorage.setItem('denture_initialized', 'true');
-      } catch (e) {}
-
       window.addEventListener('online', () => {
         this.isOnlineStatus = true;
         this.syncQueueWithFirestore();
@@ -508,10 +495,6 @@ export class DentureStorageService {
     return this.syncQueueWithFirestore();
   }
 
-  public async resetToHospitalOfficialData(): Promise<DentureRecord[]> {
-    return this.restoreRetrospectiveArchive();
-  }
-
   public async clearAllRecords(): Promise<void> {
     localStorage.setItem('denture_user_cleared', 'true');
     localStorage.setItem('denture_initialized', 'true');
@@ -537,26 +520,6 @@ export class DentureStorageService {
         await fetch('/api/records/clear', { method: 'POST' }).catch(() => {});
       } catch (e) {}
     }
-  }
-
-  public async restoreRetrospectiveArchive(): Promise<DentureRecord[]> {
-    try {
-      const res = await fetch('/api/records/restore-archive', { method: 'POST' });
-      if (res.ok) {
-        const json = await res.json();
-        const serverRecords: DentureRecord[] = (json.records || []).map((r: DentureRecord) =>
-          this.normalizeRecordCoverage(r)
-        );
-        this.setLocalRecords(serverRecords);
-
-        // Upload to Cloud Firestore
-        await this.saveBatchRecords(serverRecords);
-        return serverRecords;
-      }
-    } catch (e) {
-      console.error('Error restoring archive', e);
-    }
-    return this.getLocalRecords();
   }
 
   public exportToJson(): void {

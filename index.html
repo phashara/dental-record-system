@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600;700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Prompt:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <script>
@@ -31,13 +31,60 @@
           return { promise: promise, resolve: resolve, reject: reject };
         };
       }
-      // Suppress benign WebSocket disconnect/unopened errors in AI Studio iframe environment
-      window.addEventListener('unhandledrejection', function(event) {
-        var msg = (event && event.reason && (event.reason.message || event.reason.toString())) || '';
-        if (typeof msg === 'string' && (msg.includes('WebSocket') || msg.includes('closed without opened'))) {
+
+      // 1. Intercept WebSocket for Vite HMR in AI Studio preview to prevent connection failure
+      if (typeof window !== 'undefined' && window.WebSocket) {
+        var OrigWebSocket = window.WebSocket;
+        window.WebSocket = function (url, protocols) {
+          if (protocols === 'vite-hmr' || (typeof url === 'string' && (url.includes('token=') || url.includes('/@vite/')))) {
+            var mock = new EventTarget();
+            mock.readyState = 1; // WebSocket.OPEN
+            mock.send = function () {};
+            mock.close = function () {};
+            setTimeout(function () {
+              mock.dispatchEvent(new Event('open'));
+            }, 0);
+            return mock;
+          }
+          return new OrigWebSocket(url, protocols);
+        };
+        window.WebSocket.prototype = OrigWebSocket.prototype;
+        window.WebSocket.OPEN = OrigWebSocket.OPEN;
+        window.WebSocket.CONNECTING = OrigWebSocket.CONNECTING;
+        window.WebSocket.CLOSING = OrigWebSocket.CLOSING;
+        window.WebSocket.CLOSED = OrigWebSocket.CLOSED;
+      }
+
+      // 2. Intercept console.error for benign Vite WebSocket / HMR messages
+      var origConsoleError = console.error;
+      console.error = function () {
+        var args = Array.prototype.slice.call(arguments);
+        var str = args.map(function (a) {
+          return (a && (a.message || a.stack || a.toString())) || '';
+        }).join(' ');
+        if (str.includes('@vite/client') || str.includes('failed to connect to websocket') || str.includes('WebSocket closed without opened')) {
+          return;
+        }
+        origConsoleError.apply(console, args);
+      };
+
+      // 3. Suppress unhandledrejection from Vite WebSocket client
+      window.addEventListener('unhandledrejection', function (event) {
+        var msg = (event && event.reason && (event.reason.message || event.reason.stack || event.reason.toString())) || '';
+        if (typeof msg === 'string' && (msg.includes('WebSocket') || msg.includes('closed without opened') || msg.includes('@vite/client'))) {
           event.preventDefault();
+          if (event.stopImmediatePropagation) event.stopImmediatePropagation();
         }
       });
+
+      // 4. Suppress window error events for @vite/client
+      window.addEventListener('error', function (event) {
+        var msg = (event && (event.message || event.filename || (event.error && (event.error.message || event.error.stack)))) || '';
+        if (typeof msg === 'string' && (msg.includes('WebSocket') || msg.includes('@vite/client') || msg.includes('closed without opened'))) {
+          event.preventDefault();
+          if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        }
+      }, true);
     </script>
   </head>
   <body>

@@ -9,11 +9,9 @@ import {
   Wifi, 
   WifiOff, 
   Stethoscope, 
-  Github, 
   EyeOff, 
   Eye, 
   Database, 
-  Lock, 
   FileText, 
   FileSpreadsheet,
   Menu,
@@ -24,8 +22,7 @@ import {
   TrendingUp,
   ChevronRight,
   Shield,
-  Sparkles,
-  Type
+  Sparkles
 } from 'lucide-react';
 import { ViewTab } from '../types';
 
@@ -45,11 +42,7 @@ interface HeaderProps {
   recordCount: number;
   isPdpaMode: boolean;
   onTogglePdpaMode: () => void;
-  onOpenGitHubModal: () => void;
   onOpenDataManagement: () => void;
-  onLockScreen: () => void;
-  fontFamily?: 'ios' | 'prompt' | 'ibm';
-  onChangeFontFamily?: (font: 'ios' | 'prompt' | 'ibm') => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -68,11 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
   recordCount,
   isPdpaMode,
   onTogglePdpaMode,
-  onOpenGitHubModal,
   onOpenDataManagement,
-  onLockScreen,
-  fontFamily = 'ios',
-  onChangeFontFamily,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -196,15 +185,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <Database className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               </button>
 
-              {/* Lock Screen */}
-              <button
-                onClick={onLockScreen}
-                className="p-2 rounded-xl text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-zinc-200/60 dark:border-zinc-800 transition-colors"
-                title="ล็อคหน้าจอ Passcode (0723)"
-              >
-                <Lock className="w-4 h-4 text-amber-500" />
-              </button>
-
               {/* Sync */}
               <button
                 onClick={onSync}
@@ -223,24 +203,6 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-zinc-600" />}
               </button>
-
-              {/* Font Family Selector (Desktop) */}
-              {onChangeFontFamily && (
-                <button
-                  onClick={() => {
-                    if (fontFamily === 'ios') onChangeFontFamily('prompt');
-                    else if (fontFamily === 'prompt') onChangeFontFamily('ibm');
-                    else onChangeFontFamily('ios');
-                  }}
-                  className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-zinc-700 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200/60 dark:border-zinc-800 flex items-center space-x-1.5 transition-colors"
-                  title="เปลี่ยนรูปแบบฟอนต์ (iOS Modern / Prompt / IBM Plex)"
-                >
-                  <Type className="w-3.5 h-3.5 text-indigo-500" />
-                  <span className="hidden xl:inline">
-                    {fontFamily === 'ios' ? 'ฟอนต์ iOS' : fontFamily === 'prompt' ? 'ฟอนต์ Prompt' : 'ฟอนต์ IBM'}
-                  </span>
-                </button>
-              )}
 
               {/* Excel Import */}
               <button
@@ -567,58 +529,6 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
 
                 {/* Font Family Selector Card */}
-                {onChangeFontFamily && (
-                  <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-                          <Type className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block">
-                            รูปแบบตัวอักษร (Font Style)
-                          </span>
-                          <span className="text-[10px] text-zinc-400">
-                            {fontFamily === 'ios' ? '📱 iOS Modern (ไม่มีหัว แบบ Apple)' : fontFamily === 'prompt' ? '🅰️ Prompt (โมเดิร์นคลีน)' : '💻 IBM Plex (คมชัดสูง)'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1 p-1 bg-zinc-200/60 dark:bg-zinc-800/80 rounded-xl">
-                      <button
-                        onClick={() => onChangeFontFamily('ios')}
-                        className={`py-1.5 px-1 rounded-lg text-[11px] font-bold transition-all text-center ${
-                          fontFamily === 'ios'
-                            ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-300 shadow-xs ring-1 ring-black/5'
-                            : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
-                        }`}
-                      >
-                        iOS Modern
-                      </button>
-                      <button
-                        onClick={() => onChangeFontFamily('prompt')}
-                        className={`py-1.5 px-1 rounded-lg text-[11px] font-bold transition-all text-center ${
-                          fontFamily === 'prompt'
-                            ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-300 shadow-xs ring-1 ring-black/5'
-                            : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
-                        }`}
-                      >
-                        Prompt
-                      </button>
-                      <button
-                        onClick={() => onChangeFontFamily('ibm')}
-                        className={`py-1.5 px-1 rounded-lg text-[11px] font-bold transition-all text-center ${
-                          fontFamily === 'ibm'
-                            ? 'bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-300 shadow-xs ring-1 ring-black/5'
-                            : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900'
-                        }`}
-                      >
-                        IBM Plex
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 {/* Data Backup & Restore */}
                 <button
                   onClick={() => {
@@ -637,30 +547,6 @@ export const Header: React.FC<HeaderProps> = ({
                       </span>
                       <span className="text-[10px] text-zinc-400">
                         Backup / Restore ฐานข้อมูล รพ.
-                      </span>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-zinc-400" />
-                </button>
-
-                {/* Lock Screen */}
-                <button
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    onLockScreen();
-                  }}
-                  className="w-full p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/70 dark:border-zinc-800 flex items-center justify-between text-left active:scale-[0.98] transition-all"
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
-                      <Lock className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 block">
-                        ล็อคหน้าจอ Passcode
-                      </span>
-                      <span className="text-[10px] text-zinc-400">
-                        รหัสผ่านปลดล็อค: 0723
                       </span>
                     </div>
                   </div>
@@ -700,16 +586,7 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                   <span>{isOnline ? 'Firebase Cloud Connected' : 'Local Offline Mode'}</span>
                 </div>
-                <button
-                  onClick={() => {
-                    setIsMobileMenuOpen(false);
-                    onOpenGitHubModal();
-                  }}
-                  className="hover:underline flex items-center space-x-1"
-                >
-                  <Github className="w-3 h-3" />
-                  <span>GitHub & PDPA</span>
-                </button>
+                <span className="text-zinc-400 text-[10px]">ระบบทะเบียนฟันปลอม</span>
               </div>
             </div>
 
